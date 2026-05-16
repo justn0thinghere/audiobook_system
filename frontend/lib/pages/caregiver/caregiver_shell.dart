@@ -1,0 +1,128 @@
+import 'package:flutter/material.dart';
+
+import '../../theme/app_colors.dart';
+import 'caregiver_dashboard_page.dart';
+import 'content_management_page.dart';
+import 'insights_page.dart';
+import 'profiles_page.dart';
+import 'settings_page.dart';
+
+class CaregiverShell extends StatefulWidget {
+  final int initialIndex;
+  const CaregiverShell({super.key, this.initialIndex = 0});
+
+  @override
+  State<CaregiverShell> createState() => _CaregiverShellState();
+}
+
+class _CaregiverShellState extends State<CaregiverShell> {
+  late int _index = widget.initialIndex;
+
+  static const _tabs = <_TabSpec>[
+    _TabSpec(Icons.home_outlined, 'Dashboard', AppColors.primaryBlue),
+    _TabSpec(Icons.people_outline, 'Profiles', AppColors.primaryBlue),
+    _TabSpec(Icons.upload_outlined, 'Content', AppColors.softPeach),
+    _TabSpec(Icons.bar_chart_outlined, 'Insights', AppColors.softMint),
+    _TabSpec(Icons.settings_outlined, 'Settings', AppColors.softMint),
+  ];
+
+  Widget _pageFor(int i) {
+    switch (i) {
+      case 0:
+        return CaregiverDashboardPage(onJumpToTab: (idx) => setState(() => _index = idx));
+      case 1:
+        return const ProfilesPage();
+      case 2:
+        return const ContentManagementPage();
+      case 3:
+        return const InsightsPage();
+      case 4:
+        return const SettingsPage();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(child: _pageFor(_index)),
+      bottomNavigationBar: _CaregiverBottomNav(
+        tabs: _tabs,
+        currentIndex: _index,
+        onTap: (i) => setState(() => _index = i),
+      ),
+    );
+  }
+}
+
+class _TabSpec {
+  final IconData icon;
+  final String label;
+  final Color highlight;
+  const _TabSpec(this.icon, this.label, this.highlight);
+}
+
+class _CaregiverBottomNav extends StatelessWidget {
+  final List<_TabSpec> tabs;
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  const _CaregiverBottomNav({
+    required this.tabs,
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.cardBorder)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: List.generate(tabs.length, (i) {
+            final t = tabs[i];
+            final selected = i == currentIndex;
+            return Expanded(
+              child: InkWell(
+                onTap: () => onTap(i),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 32,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: selected ? t.highlight : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(t.icon, size: 22, color: AppColors.textPrimary),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        t.label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}

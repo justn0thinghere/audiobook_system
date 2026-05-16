@@ -1,0 +1,49 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class ListeningHistory extends Model
+{
+    use HasFactory;
+    use HasUuids;
+
+    protected $table = 'listening_history';
+    protected $primaryKey = 'history_id';
+    public $incrementing = false;
+    protected $keyType = 'string';
+
+    protected $fillable = [
+        'child_id',
+        'audiobook_id',
+        'duration_seconds',
+        'last_position_seconds',
+        'mood',
+        'completed',
+    ];
+
+    protected $casts = [
+        'duration_seconds' => 'integer',
+        'last_position_seconds' => 'integer',
+        'completed' => 'boolean',
+    ];
+
+    public function uniqueIds(): array
+    {
+        return ['history_id'];
+    }
+
+    public function childProfile(): BelongsTo
+    {
+        return $this->belongsTo(ChildProfile::class, 'child_id', 'child_id');
+    }
+
+    public function audiobook(): BelongsTo
+    {
+        return $this->belongsTo(Audiobook::class, 'audiobook_id', 'audiobook_id');
+    }
+}

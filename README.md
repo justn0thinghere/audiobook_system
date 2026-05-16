@@ -1,59 +1,138 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Audiobook for Autism — Monorepo
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Autism-friendly audiobook system for children and caregivers. This repository
+holds both the Flutter mobile app and the Laravel API in a single workspace so
+they can be developed side by side in VSCode.
 
-## About Laravel
+```
+audiobook_backend/
+├── backend/    # Laravel 11 API (PHP)
+└── frontend/   # Flutter mobile app (Dart)
+```
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Backend — Laravel API
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Path: [backend/](backend/)
 
-## Learning Laravel
+The Laravel app exposes a small JSON API used by the Flutter client.
+Endpoints currently implemented (all `POST`):
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+| Path                          | Purpose                              |
+|-------------------------------|--------------------------------------|
+| `/api/test`                   | Routing health-check                 |
+| `/api/audiobooks/{id}`        | Fetch a single audiobook by UUID     |
+| `/api/content/summary`        | Counts: total / audio / text / AI    |
+| `/api/content/list`           | Paginated content list with filters  |
+| `/api/content/create`         | Caregiver upload of new content      |
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### Running the backend
 
-## Laravel Sponsors
+The folder lives under `c:\xampp\htdocs\audiobook_backend\backend\`, so XAMPP
+will serve it at `http://localhost/audiobook_backend/backend/public/`. For
+mobile development we recommend `artisan serve` so the URL stays simple:
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```powershell
+cd backend
+php artisan serve --host=0.0.0.0 --port=8000
+```
 
-### Premium Partners
+Android emulator reaches the host loopback through `10.0.2.2`, so the Flutter
+client points at `http://10.0.2.2:8000/api` by default
+([frontend/lib/config/app_config.dart](frontend/lib/config/app_config.dart)).
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+If you prefer to keep using XAMPP Apache, change `databaseApiUrl` to
+`http://10.0.2.2/audiobook_backend/backend/public/api`.
 
-## Contributing
+---
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Frontend — Flutter app
 
-## Code of Conduct
+Path: [frontend/](frontend/)
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Run
 
-## Security Vulnerabilities
+```powershell
+cd frontend
+flutter pub get
+flutter run
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Project structure
 
-## License
+```
+frontend/lib/
+├── main.dart                       # Entry point + Provider setup
+├── audio/audio_engine.dart         # just_audio wrapper (play/pause/seek/speed)
+├── config/app_config.dart          # API URL + app constants
+├── models/                         # Audiobook, ChildProfile, ContentItem
+├── services/                       # ApiResponse + DatabaseService (HTTP)
+├── state/                          # Provider ChangeNotifiers
+│   ├── profiles_state.dart         # Child profiles + active session
+│   ├── settings_state.dart         # Narrator voice, speed, sensory toggles
+│   └── pin_state.dart              # Caregiver PIN (flutter_secure_storage)
+├── theme/                          # AppColors + AppTheme (Material 3)
+├── widgets/                        # StatCard, SoftCard, SoftChip, BackPill
+└── pages/
+    ├── caregiver/                  # 5-tab caregiver mode
+    │   ├── caregiver_shell.dart
+    │   ├── caregiver_dashboard_page.dart
+    │   ├── profiles_page.dart
+    │   ├── add_child_dialog.dart
+    │   ├── content_management_page.dart
+    │   ├── upload_content_page.dart
+    │   ├── insights_page.dart
+    │   └── settings_page.dart      # Narration + Sensory + PIN change
+    ├── child/                      # 3-tab child mode
+    │   ├── child_shell.dart        # Locks back-nav behind PIN
+    │   ├── child_home_page.dart    # Mood selector + Continue listening
+    │   ├── story_library_page.dart # Search + category + age filters
+    │   └── audio_player_page.dart  # Sensory protection + paged narration
+    └── shared/
+        └── guardian_pin_dialog.dart
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### Modules implemented
+
+The UI covers the modules from the FYP scope:
+
+- **Profile Management** — `ProfilesState`, `add_child_dialog.dart`,
+  `profiles_page.dart`, `settings_page.dart`.
+- **Audio Playback Engine** — `audio_engine.dart` and the player UI in
+  `audio_player_page.dart`.
+- **Caregiver vs Child UI** — separate shells with a Guardian PIN gate.
+- **Content Management** — list, summary, upload (calls Laravel API).
+- **Accessibility / Sensory Friendly UI** — soft pastel palette, large rounded
+  hit targets, Nunito font, reduced-animations toggle, "Sensory Protection
+  Active" banner on the player.
+- **AI Adaptive Learning** — placeholders are wired so AI hooks can be added
+  to the upload flow and audio engine later.
+
+### Autism-friendly design notes
+
+- Soft pastel palette in [theme/app_colors.dart](frontend/lib/theme/app_colors.dart).
+- Generous spacing, rounded corners (16–24px) everywhere.
+- High-contrast text on white cards; no harsh shadows.
+- Bottom navigation uses a colored pill behind the active icon — easy to
+  scan, no animation reliance.
+- Child Mode strips destructive navigation (back button, etc.) behind a
+  4-digit PIN; default PIN is `1234`, changeable in Settings.
+
+### Default PIN
+
+`1234` — change immediately from **Settings → PIN Change**.
+
+---
+
+## Switching machines / emulator
+
+| Device                      | API URL                                              |
+|-----------------------------|------------------------------------------------------|
+| Android emulator (artisan)  | `http://10.0.2.2:8000/api`                           |
+| Android emulator (XAMPP)    | `http://10.0.2.2/audiobook_backend/backend/public/api` |
+| Physical device (same Wi-Fi)| `http://<YOUR-LAN-IP>:8000/api`                      |
+| iOS simulator               | `http://127.0.0.1:8000/api`                          |
+
+Edit [frontend/lib/config/app_config.dart](frontend/lib/config/app_config.dart)
+to switch.

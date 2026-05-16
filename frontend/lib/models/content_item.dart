@@ -1,0 +1,83 @@
+import '_json_helpers.dart';
+
+class ContentItem {
+  final String? audiobookId;
+  final String title;
+  final String? author;
+  final String? description;
+  final String? topic;
+  final String? category;
+  final String? difficulty;
+  final String? type;
+  final String? coverImage;
+  final String? audioFile;
+  final int? durationMinutes;
+  final String? ageGroup;
+  final String? tags;
+  final bool isGenerated;
+  final bool isUserUploaded;
+  final String? status;
+  final DateTime? createdAt;
+
+  ContentItem({
+    this.audiobookId,
+    required this.title,
+    this.author,
+    this.description,
+    this.topic,
+    this.category,
+    this.difficulty,
+    this.type,
+    this.coverImage,
+    this.audioFile,
+    this.durationMinutes,
+    this.ageGroup,
+    this.tags,
+    this.isGenerated = false,
+    this.isUserUploaded = false,
+    this.status,
+    this.createdAt,
+  });
+
+  factory ContentItem.fromJson(Map<String, dynamic> json) {
+    return ContentItem(
+      audiobookId: safeNullableString(json['audiobook_id']),
+      title: safeString(json['title'], 'Untitled'),
+      author: safeNullableString(json['author']),
+      description: safeNullableString(json['description']),
+      topic: safeNullableString(json['topic']),
+      category: safeNullableString(json['category']),
+      difficulty: safeNullableString(json['difficulty']),
+      type: safeNullableString(json['type']),
+      coverImage: safeNullableString(json['cover_image']),
+      audioFile: safeNullableString(json['audio_file']),
+      durationMinutes: safeInt(json['duration_minutes']),
+      ageGroup: safeNullableString(json['age_group']),
+      tags: safeNullableString(json['tags']),
+      isGenerated: safeBool(json['is_generated']),
+      isUserUploaded: safeBool(json['is_user_uploaded']),
+      status: safeNullableString(json['status']),
+      createdAt: safeDate(json['created_at']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'audiobook_id': audiobookId,
+        'title': title,
+        'author': author,
+        'description': description,
+        'topic': topic,
+        'category': category,
+        'difficulty': difficulty,
+        'type': type,
+        'cover_image': coverImage,
+        'audio_file': audioFile,
+        'duration_minutes': durationMinutes,
+        'age_group': ageGroup,
+        'tags': tags,
+        'is_generated': isGenerated,
+        'is_user_uploaded': isUserUploaded,
+        'status': status,
+        'created_at': createdAt?.toIso8601String(),
+      };
+}

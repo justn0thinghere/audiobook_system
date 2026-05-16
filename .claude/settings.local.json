@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze *)",
+      "Bash(flutter test *)",
+      "Bash(flutter devices *)",
+      "Bash(rm \"database/migrations/0001_01_01_000000_create_users_table.php\")",
+      "Bash(rm \"database/migrations/2025_05_16_000002_create_user_settings_table.php\")"
+    ]
+  }
+}

@@ -1,0 +1,371 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../config/app_config.dart';
+import '../models/audiobook.dart';
+import '../models/caregiver.dart';
+import '../models/child_profile.dart';
+import '../models/content_item.dart';
+import '../models/content_summary.dart';
+import '../models/user_settings.dart';
+import 'api_service.dart';
+
+class DatabaseService {
+  DatabaseService._();
+
+  static const String baseUrl = AppConfig.databaseApiUrl;
+  static const Duration _timeout = Duration(seconds: 30);
+
+  // Keys used in SharedPreferences.
+  static const String kSessionToken = 'session_token';
+  static const String kSessionExpires = 'session_expires';
+  static const String kCaregiverId = 'caregiver_id';
+  static const String kCaregiverName = 'caregiver_name';
+  static const String kCaregiverEmail = 'caregiver_email';
+  static const String kCaregiverMobile = 'caregiver_mobile';
+
+  // ---------- shared helpers ----------
+
+  static Future<bool> _hasNetworkConnection() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
+    } on SocketException catch (_) {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Map<String, String> _headers({String? sessionToken}) {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (sessionToken != null && sessionToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $sessionToken';
+    }
+    return headers;
+  }
+
+  static Future<String?> _currentToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(kSessionToken);
+  }
+
+  static Future<ApiResponse> _post(
+    String path, {
+    Map<String, dynamic>? body,
+    bool requireAuth = true,
+  }) async {
+    if (!await _hasNetworkConnection()) {
+      return ApiResponse.failure(
+        'No internet connection. Please check your network settings.',
+        error: 'NO_CONNECTIVITY',
+      );
+    }
+
+    try {
+      final token = requireAuth ? await _currentToken() : null;
+      if (requireAuth && (token == null || token.isEmpty)) {
+        return ApiResponse.failure('Not signed in', error: 'NO_SESSION');
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl$path'),
+            headers: _headers(sessionToken: token),
+            body: jsonEncode(body ?? {}),
+          )
+          .timeout(_timeout);
+
+      if (response.body.isEmpty) {
+        return ApiResponse.failure('Empty response', error: 'EMPTY_BODY');
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return ApiResponse.failure('Unexpected response shape', error: 'BAD_SHAPE');
+      }
+      return ApiResponse.fromBackend(decoded);
+    } on TimeoutException {
+      return ApiResponse.failure('Request timed out', error: 'TIMEOUT');
+    } on SocketException {
+      return ApiResponse.failure('Network error', error: 'NETWORK_ERROR');
+    } catch (e) {
+      return ApiResponse.failure('Network error: $e', error: 'UNKNOWN');
+    }
+  }
+
+  // ---------- auth ----------
+
+  static Future<ApiResponse> register({
+    required String name,
+    required String pin,
+    String? email,
+    String? mobileNumber,
+    String? deviceId,
+    String? deviceName,
+  }) async {
+    final resp = await _post('/auth/register', requireAuth: false, body: {
+      'name': name,
+      'pin': pin,
+      if (email != null && email.isNotEmpty) 'email': email,
+      if (mobileNumber != null && mobileNumber.isNotEmpty)
+        'mobile_number': mobileNumber,
+      if (deviceId != null) 'device_id': deviceId,
+      if (deviceName != null) 'device_name': deviceName,
+    });
+    if (resp.success) await _persistSession(resp);
+    return resp;
+  }
+
+  static Future<ApiResponse> loginWithPin({
+    required String pin,
+    String? email,
+    String? mobileNumber,
+    String? deviceId,
+    String? deviceName,
+    String? fcmToken,
+  }) async {
+    final resp = await _post('/auth/login', requireAuth: false, body: {
+      'pin': pin,
+      if (email != null && email.isNotEmpty) 'email': email,
+      if (mobileNumber != null && mobileNumber.isNotEmpty)
+        'mobile_number': mobileNumber,
+      if (deviceId != null) 'device_id': deviceId,
+      if (deviceName != null) 'device_name': deviceName,
+      if (fcmToken != null) 'fcm_token': fcmToken,
+    });
+    if (resp.success) await _persistSession(resp);
+    return resp;
+  }
+
+  static Future<ApiResponse> logout() async {
+    final resp = await _post('/auth/logout');
+    await _clearSession();
+    return resp;
+  }
+
+  static Future<Caregiver?> me() async {
+    final resp = await _post('/auth/me');
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return Caregiver.fromJson(resp.data as Map<String, dynamic>);
+    }
+    return null;
+  }
+
+  static Future<void> _persistSession(ApiResponse resp) async {
+    if (resp.data is! Map<String, dynamic>) return;
+    final data = resp.data as Map<String, dynamic>;
+    final prefs = await SharedPreferences.getInstance();
+    if (data['session_token'] != null) {
+      await prefs.setString(kSessionToken, data['session_token'].toString());
+    }
+    if (data['session_expires'] != null) {
+      await prefs.setString(kSessionExpires, data['session_expires'].toString());
+    }
+    final caregiver = data['caregiver'];
+    if (caregiver is Map<String, dynamic>) {
+      await prefs.setString(kCaregiverId, caregiver['caregiver_id']?.toString() ?? '');
+      await prefs.setString(kCaregiverName, caregiver['name']?.toString() ?? '');
+      if (caregiver['email'] != null) {
+        await prefs.setString(kCaregiverEmail, caregiver['email'].toString());
+      }
+      if (caregiver['mobile_number'] != null) {
+        await prefs.setString(kCaregiverMobile, caregiver['mobile_number'].toString());
+      }
+    }
+  }
+
+  static Future<void> _clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(kSessionToken);
+    await prefs.remove(kSessionExpires);
+    await prefs.remove(kCaregiverId);
+    await prefs.remove(kCaregiverName);
+    await prefs.remove(kCaregiverEmail);
+    await prefs.remove(kCaregiverMobile);
+  }
+
+  static Future<bool> isLoggedIn() async {
+    final token = await _currentToken();
+    return token != null && token.isNotEmpty;
+  }
+
+  static Future<bool> verifyCurrentPin(String pin) async {
+    final resp = await _post('/auth/verify-pin', body: {'pin': pin});
+    return resp.success;
+  }
+
+  // ---------- settings ----------
+
+  static Future<ApiResponse> getSettings() async {
+    final resp = await _post('/settings/');
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse.fromBackend(
+        {
+          'status': 'SUCCESS',
+          'message': resp.message,
+        },
+        data: UserSettings.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
+  static Future<ApiResponse> updateSettings(UserSettings settings) async {
+    final resp = await _post('/settings/update', body: settings.toJson());
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse.fromBackend(
+        {
+          'status': 'SUCCESS',
+          'message': resp.message,
+        },
+        data: UserSettings.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
+  static Future<ApiResponse> changePin({
+    required String currentPin,
+    required String newPin,
+  }) {
+    return _post('/settings/change-pin', body: {
+      'current_pin': currentPin,
+      'new_pin': newPin,
+    });
+  }
+
+  // ---------- child profiles ----------
+
+  static Future<ApiResponse> listChildProfiles() async {
+    final resp = await _post('/child-profiles/');
+    if (resp.success && resp.data is List) {
+      final profiles = (resp.data as List)
+          .whereType<Map<String, dynamic>>()
+          .map(ChildProfile.fromJson)
+          .toList();
+      return ApiResponse(success: true, message: resp.message, data: profiles);
+    }
+    return resp;
+  }
+
+  static Future<ApiResponse> createChildProfile({
+    required String name,
+    required int age,
+    required String avatarEmoji,
+    required String avatarColorHex,
+    String? favoriteGenre,
+  }) async {
+    final resp = await _post('/child-profiles/create', body: {
+      'name': name,
+      'age': age,
+      'avatar_emoji': avatarEmoji,
+      'avatar_color': avatarColorHex,
+      if (favoriteGenre != null) 'favorite_genre': favoriteGenre,
+    });
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: ChildProfile.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
+  static Future<ApiResponse> updateChildProfile(String childId, Map<String, dynamic> patch) {
+    return _post('/child-profiles/$childId/update', body: patch);
+  }
+
+  static Future<ApiResponse> deleteChildProfile(String childId) {
+    return _post('/child-profiles/$childId/delete');
+  }
+
+  // ---------- audiobooks ----------
+
+  static Future<ApiResponse> getAudiobookData(String audiobookId) async {
+    final resp = await _post('/audiobooks/$audiobookId');
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: Audiobook.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
+  // ---------- content management ----------
+
+  static Future<ApiResponse> getContentSummary() async {
+    final resp = await _post('/content/summary');
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: ContentSummary.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
+  static Future<ApiResponse> getContentList({
+    String? filterType,
+    String? search,
+    String? category,
+    String? ageGroup,
+  }) async {
+    final resp = await _post('/content/list', body: {
+      if (filterType != null) 'filter_type': filterType,
+      if (search != null && search.isNotEmpty) 'search': search,
+      if (category != null && category.isNotEmpty) 'category': category,
+      if (ageGroup != null && ageGroup.isNotEmpty) 'age_group': ageGroup,
+    });
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      final items = (resp.data as Map<String, dynamic>)['items'];
+      final list = items is List
+          ? items
+              .whereType<Map<String, dynamic>>()
+              .map(ContentItem.fromJson)
+              .toList()
+          : <ContentItem>[];
+      return ApiResponse(success: true, message: resp.message, data: list);
+    }
+    return resp;
+  }
+
+  static Future<ApiResponse> createContent(Map<String, dynamic> payload) {
+    return _post('/content/create', body: payload);
+  }
+
+  // ---------- listening history ----------
+
+  static Future<ApiResponse> recordListeningSession({
+    required String childId,
+    required String audiobookId,
+    int? durationSeconds,
+    int? lastPositionSeconds,
+    String? mood,
+    bool? completed,
+  }) {
+    return _post('/listening-history/record', body: {
+      'child_id': childId,
+      'audiobook_id': audiobookId,
+      if (durationSeconds != null) 'duration_seconds': durationSeconds,
+      if (lastPositionSeconds != null) 'last_position_seconds': lastPositionSeconds,
+      if (mood != null) 'mood': mood,
+      if (completed != null) 'completed': completed,
+    });
+  }
+
+  static Future<ApiResponse> listeningHistoryFor(String childId) {
+    return _post('/listening-history/child/$childId');
+  }
+}
