@@ -6,13 +6,23 @@ import '../services/database_service.dart';
 class ProfilesState extends ChangeNotifier {
   List<ChildProfile> _profiles = const [];
   ChildProfile? _activeProfile;
+  String? _currentMood;
   bool _loading = false;
   String? _lastError;
 
   List<ChildProfile> get profiles => List.unmodifiable(_profiles);
   ChildProfile? get activeProfile => _activeProfile;
+
+  /// The mood the child last selected on the Child Home screen
+  /// (happy / calm / curious / sleepy). Attached to the next listening session.
+  String? get currentMood => _currentMood;
   bool get loading => _loading;
   String? get lastError => _lastError;
+
+  void setMood(String? mood) {
+    _currentMood = mood;
+    notifyListeners();
+  }
 
   int get totalChildren => _profiles.length;
   int get totalListeningMinutes =>
@@ -72,17 +82,20 @@ class ProfilesState extends ChangeNotifier {
 
   void enterChildMode(ChildProfile profile) {
     _activeProfile = profile;
+    _currentMood = null; // fresh session
     notifyListeners();
   }
 
   void exitChildMode() {
     _activeProfile = null;
+    _currentMood = null;
     notifyListeners();
   }
 
   void clear() {
     _profiles = const [];
     _activeProfile = null;
+    _currentMood = null;
     notifyListeners();
   }
 }

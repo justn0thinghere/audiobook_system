@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/child_profile.dart';
+import '../../navigation/app_navigation_service.dart';
 import '../../state/auth_state.dart';
 import '../../state/profiles_state.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/empty_state.dart';
 import '../../widgets/soft_card.dart';
 import '../../widgets/stat_card.dart';
+import '../shared/auth_gate.dart';
 import '../child/child_shell.dart';
 import 'add_child_dialog.dart';
 
@@ -48,7 +51,7 @@ class CaregiverDashboardPage extends StatelessWidget {
                 );
               },
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.danger,
+                backgroundColor: AppColors.warning,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 shape: RoundedRectangleBorder(
@@ -140,13 +143,38 @@ class CaregiverDashboardPage extends StatelessWidget {
         ),
         const SizedBox(height: 12),
 
-        for (final profile in profiles.profiles) ...[
-          _ChildProfileCard(
-            profile: profile,
-            onEnterChildMode: () => _enterChildMode(context, profile),
-          ),
-          const SizedBox(height: 12),
-        ],
+        if (profiles.profiles.isEmpty)
+          EmptyState(
+            icon: Icons.child_care_rounded,
+            title: 'No child profiles yet',
+            subtitle:
+                'Add your first child to start tracking listening time\nand entering Child Mode.',
+            iconBackground: AppColors.iconCircleBlue,
+            iconColor: AppColors.primaryBlueDark,
+            action: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: AppColors.textPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () => showDialog(
+                context: context,
+                builder: (_) => const AddChildDialog(),
+              ),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add your first child'),
+            ),
+          )
+        else
+          for (final profile in profiles.profiles) ...[
+            _ChildProfileCard(
+              profile: profile,
+              onEnterChildMode: () => _enterChildMode(context, profile),
+            ),
+            const SizedBox(height: 12),
+          ],
       ],
     );
   }
@@ -290,12 +318,23 @@ class _LogoutDialog extends StatelessWidget {
         ),
         FilledButton.icon(
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.danger,
+            backgroundColor: AppColors.warning,
             foregroundColor: Colors.white,
           ),
           onPressed: () async {
+            // Capture references before popping the dialog so we don't use a
+            // deactivated context after the await.
+            final auth = context.read<AuthState>();
+            final navigator = AppNavigationService.navigatorKey.currentState;
             Navigator.pop(context);
-            await context.read<AuthState>().logout();
+            await auth.logout();
+            // Entering/exiting Child Mode replaces AuthGate via pushReplacement,
+            // so reset the stack to a fresh AuthGate — now signed out, it shows
+            // the LoginPage.
+            navigator?.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const AuthGate()),
+              (route) => false,
+            );
           },
           icon: const Icon(Icons.logout_rounded, size: 18),
           label: const Text('Logout', style: TextStyle(fontWeight: FontWeight.w700)),

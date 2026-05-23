@@ -155,14 +155,12 @@ php artisan key:generate
 #       DB_PASSWORD=
 
 # 5. Run migrations (creates caregivers, child_profiles,
-#    caregiver_settings, listening_history)
+#    caregiver_settings, listening_history, audiobooks)
 php artisan migrate:fresh
 
 # 6. Start the API bound to your LAN so a phone can reach it
 php artisan serve --host=0.0.0.0 --port=8000
 ```
-
-> The `audiobooks` table is **not** in the migration set. If you want to upload AI / pre-recorded content, create the table manually in phpMyAdmin to match the columns expected by `app/Models/Audiobook.php`.
 
 ---
 
@@ -315,7 +313,7 @@ Base URL: `http://<host>:8000/api`. Every request is `POST` (multipart only for 
 | **Tap Listen — no voice** | Device has no TTS engine installed, or device volume is at 0. Try *Settings → Accessibility → Text-to-speech output* on Android. The snackbar in-app will hint at this. |
 | **"Cleartext HTTP not permitted"** | Only an issue on custom builds; the bundled manifest already enables it. If you changed the manifest, restore `android:usesCleartextTraffic="true"`. |
 | **Phone shows a raw SQL error in a snackbar** | `APP_DEBUG=true` in `backend/.env` leaks the SQL exception. Set `APP_DEBUG=false` for friendlier "Server Error" messages. |
-| **`migrate:fresh` drops the audiobooks table** | Yes — the `audiobooks` table is hand-managed. Back it up first (`mysqldump`) or recreate it after migrations. |
+| **`audiobooks` table doesn't exist** | Run `php artisan migrate` — the audiobooks table is in `2025_05_16_000004_create_audiobooks_table.php`. Use plain `migrate` (not `migrate:fresh`) so your caregiver account survives. |
 
 ---
 

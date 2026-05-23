@@ -9,8 +9,10 @@ class ContentItem {
   final String? category;
   final String? difficulty;
   final String? type;
+  final String? contentText;
   final String? coverImage;
   final String? audioFile;
+  final String? videoFile;
   final int? durationMinutes;
   final String? ageGroup;
   final String? tags;
@@ -28,8 +30,10 @@ class ContentItem {
     this.category,
     this.difficulty,
     this.type,
+    this.contentText,
     this.coverImage,
     this.audioFile,
+    this.videoFile,
     this.durationMinutes,
     this.ageGroup,
     this.tags,
@@ -49,8 +53,10 @@ class ContentItem {
       category: safeNullableString(json['category']),
       difficulty: safeNullableString(json['difficulty']),
       type: safeNullableString(json['type']),
+      contentText: safeNullableString(json['content_text']),
       coverImage: safeNullableString(json['cover_image']),
       audioFile: safeNullableString(json['audio_file']),
+      videoFile: safeNullableString(json['video_file']),
       durationMinutes: safeInt(json['duration_minutes']),
       ageGroup: safeNullableString(json['age_group']),
       tags: safeNullableString(json['tags']),
@@ -70,8 +76,10 @@ class ContentItem {
         'category': category,
         'difficulty': difficulty,
         'type': type,
+        'content_text': contentText,
         'cover_image': coverImage,
         'audio_file': audioFile,
+        'video_file': videoFile,
         'duration_minutes': durationMinutes,
         'age_group': ageGroup,
         'tags': tags,

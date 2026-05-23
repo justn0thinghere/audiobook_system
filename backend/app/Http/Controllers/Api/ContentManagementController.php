@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Audiobook;
+use App\Services\GeminiService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -80,7 +81,7 @@ class ContentManagementController extends Controller
             'topic'        => 'nullable|string|max:100',
             'category'     => 'nullable|string|max:100',
             'difficulty'   => 'nullable|in:easy,medium,hard,Easy,Medium,Hard',
-            'type'         => 'nullable|in:Audio,Text',
+            'type'         => 'nullable|in:Audio,Text,Video',
             'tags'         => 'nullable|string',
             'content_text' => 'nullable|string',
             'description'  => 'nullable|string',
@@ -88,6 +89,7 @@ class ContentManagementController extends Controller
             'is_generated' => 'nullable|boolean',
             'source_file'  => 'nullable|file|mimes:pdf,txt,mp3,wav|max:10240',
             'audio_file'   => 'nullable|file|mimes:mp3,wav|max:20480',
+            'video_file'   => 'nullable|file|mimes:mp4,mov,webm|max:51200',
             'cover_image'  => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
         ]);
 
@@ -102,6 +104,7 @@ class ContentManagementController extends Controller
         try {
             $sourceFilePath = null;
             $audioFilePath  = null;
+            $videoFilePath  = null;
             $coverImagePath = null;
 
             if ($request->hasFile('source_file')) {
@@ -110,12 +113,16 @@ class ContentManagementController extends Controller
             if ($request->hasFile('audio_file')) {
                 $audioFilePath = 'storage/' . $request->file('audio_file')->store('uploads/audio', 'public');
             }
+            if ($request->hasFile('video_file')) {
+                $videoFilePath = 'storage/' . $request->file('video_file')->store('uploads/video', 'public');
+            }
             if ($request->hasFile('cover_image')) {
                 $coverImagePath = 'storage/' . $request->file('cover_image')->store('uploads/covers', 'public');
             }
 
             $isGenerated = $request->boolean('is_generated');
-            $type = $request->input('type', $audioFilePath ? 'Audio' : 'Text');
+            $type = $request->input('type')
+                ?? ($videoFilePath ? 'Video' : ($audioFilePath ? 'Audio' : 'Text'));
             $difficulty = strtolower((string) $request->input('difficulty', 'easy'));
 
             $content = Audiobook::create([
@@ -130,6 +137,7 @@ class ContentManagementController extends Controller
                 'age_group'        => $request->input('age_group'),
                 'source_file'      => $sourceFilePath,
                 'audio_file'       => $audioFilePath,
+                'video_file'       => $videoFilePath,
                 'cover_image'      => $coverImagePath,
                 'is_generated'     => $isGenerated,
                 'is_user_uploaded' => true,
@@ -146,6 +154,150 @@ class ContentManagementController extends Controller
         }
     }
 
+    /**
+     * Generate a story (and optional cover image) with Gemini AI and save it
+     * as a new audiobook. Used by the caregiver "Generate with AI" flow (UC-6).
+     */
+    public function generateContent(Request $request, GeminiService $gemini): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'topic'          => 'required|string|max:255',
+            'age_group'      => 'nullable|string|max:50',
+            'category'       => 'nullable|string|max:100',
+            'difficulty'     => 'nullable|in:easy,medium,hard,Easy,Medium,Hard',
+            'tags'           => 'nullable|string',
+            'source_text'    => 'nullable|string',
+            'generate_image' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse(
+                'Validation failed: ' . implode(', ', $validator->errors()->all()),
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
+        if (!$gemini->isConfigured()) {
+            return $this->errorResponse(
+                'AI is not configured. Add GEMINI_API_KEY to the backend .env file.',
+                'AI_NOT_CONFIGURED',
+                503
+            );
+        }
+
+        try {
+            $story = $gemini->generateStory(
+                $request->input('topic'),
+                $request->input('age_group'),
+                $request->input('source_text'),
+            );
+
+            $coverImagePath = null;
+            if ($request->boolean('generate_image')) {
+                $coverImagePath = $gemini->generateCoverImage(
+                    $story['image_prompt'] !== '' ? $story['image_prompt'] : $request->input('topic')
+                );
+            }
+
+            $content = Audiobook::create([
+                'title'            => $story['title'],
+                'topic'            => $request->input('topic'),
+                'category'         => $request->input('category'),
+                'difficulty'       => strtolower((string) $request->input('difficulty', 'easy')),
+                'type'             => 'Text',
+                'tags'             => $request->input('tags'),
+                'content_text'     => $story['content'],
+                'age_group'        => $request->input('age_group'),
+                'cover_image'      => $coverImagePath,
+                'is_generated'     => true,
+                'is_user_uploaded' => true,
+                'status'           => 'available',
+            ]);
+
+            return $this->successResponse(
+                $coverImagePath
+                    ? 'AI story and cover image generated'
+                    : 'AI story generated (cover image unavailable on free tier)',
+                $this->serialize($content)
+            );
+        } catch (\Throwable $e) {
+            Log::error('AI generate content error', ['error' => $e->getMessage()]);
+            return $this->errorResponse(
+                'AI generation failed: ' . $e->getMessage(),
+                'AI_FAILED',
+                502
+            );
+        }
+    }
+
+    /**
+     * Add a single page (text + optional image) to an existing audiobook.
+     * Multipart request: text, image (file), page_number.
+     */
+    public function addPage(Request $request, string $audiobookId): JsonResponse
+    {
+        $book = Audiobook::where('audiobook_id', $audiobookId)->first();
+        if (!$book) {
+            return $this->errorResponse('Audiobook not found', 'NOT_FOUND', 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'text'        => 'nullable|string',
+            'page_number' => 'nullable|integer|min:1',
+            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse(
+                'Validation failed: ' . implode(', ', $validator->errors()->all()),
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
+        try {
+            $imagePath = null;
+            if ($request->hasFile('image')) {
+                $imagePath = 'storage/' . $request->file('image')->store('uploads/pages', 'public');
+            }
+
+            $pageNumber = (int) $request->input('page_number', $book->pages()->count() + 1);
+
+            $page = $book->pages()->create([
+                'page_number' => $pageNumber,
+                'text'        => $request->input('text'),
+                'image'       => $imagePath,
+            ]);
+
+            // First page's image doubles as the cover when none is set.
+            if ($imagePath && empty($book->cover_image) && $pageNumber === 1) {
+                $book->cover_image = $imagePath;
+                $book->save();
+            }
+
+            return $this->successResponse('Page added', [
+                'page_id'     => $page->page_id,
+                'page_number' => $page->page_number,
+                'text'        => $page->text,
+                'image'       => $page->image ? url($page->image) : null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Add page error', ['error' => $e->getMessage()]);
+            return $this->errorResponse('Could not add page', 'SERVER_ERROR', 500);
+        }
+    }
+
+    private function serializePages(Audiobook $item): array
+    {
+        return $item->pages->map(fn ($p) => [
+            'page_id'     => $p->page_id,
+            'page_number' => $p->page_number,
+            'text'        => $p->text,
+            'image'       => $p->image ? url($p->image) : null,
+        ])->toArray();
+    }
+
     private function serialize(Audiobook $item): array
     {
         return [
@@ -159,6 +311,7 @@ class ContentManagementController extends Controller
             'type'             => $item->type,
             'content_text'     => $item->content_text,
             'audio_file'       => $item->audio_file ? url($item->audio_file) : null,
+            'video_file'       => $item->video_file ? url($item->video_file) : null,
             'source_file'      => $item->source_file ? url($item->source_file) : null,
             'cover_image'      => $item->cover_image ? url($item->cover_image) : null,
             'duration_minutes' => $item->duration_minutes,
@@ -168,6 +321,7 @@ class ContentManagementController extends Controller
             'is_generated'     => (bool) $item->is_generated,
             'is_user_uploaded' => (bool) $item->is_user_uploaded,
             'status'           => $item->status,
+            'pages'            => $this->serializePages($item),
             'created_at'       => $item->created_at ? Carbon::parse($item->created_at)->format('Y-m-d H:i:s') : null,
             'updated_at'       => $item->updated_at ? Carbon::parse($item->updated_at)->format('Y-m-d H:i:s') : null,
         ];

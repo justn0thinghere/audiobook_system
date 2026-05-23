@@ -24,6 +24,7 @@ class Audiobook extends Model
         'type',
         'content_text',
         'audio_file',
+        'video_file',
         'source_file',
         'cover_image',
         'duration_minutes',
@@ -57,5 +58,11 @@ class Audiobook extends Model
     public function listeningHistory(): HasMany
     {
         return $this->hasMany(ListeningHistory::class, 'audiobook_id', 'audiobook_id');
+    }
+
+    public function pages(): HasMany
+    {
+        return $this->hasMany(AudiobookPage::class, 'audiobook_id', 'audiobook_id')
+            ->orderBy('page_number');
     }
 }

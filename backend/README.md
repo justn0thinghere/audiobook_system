@@ -18,7 +18,7 @@ php artisan key:generate
 #    Name: autism_audiobook
 #    Then set DB_DATABASE / DB_USERNAME / DB_PASSWORD in .env
 
-# 4. Create the tables (drops + rebuilds the four UUID tables)
+# 4. Create the tables (drops + rebuilds all five UUID tables)
 php artisan migrate:fresh
 
 # 5. Serve to your LAN so a phone can reach the API
@@ -40,8 +40,8 @@ app/
                         AudiobookController, ContentManagementController,
                         ListeningHistoryController
     Middleware/         SessionAuthMiddleware  (Bearer-token gate)
-database/migrations/    4 UUID-based tables (caregivers, child_profiles,
-                        caregiver_settings, listening_history)
+database/migrations/    5 UUID-based tables (caregivers, child_profiles,
+                        caregiver_settings, listening_history, audiobooks)
 routes/api.php          Public /auth/* + protected session.auth group
 config/auth.php         User provider points to App\Models\Caregiver
 ```
@@ -63,7 +63,7 @@ config/auth.php         User provider points to App\Models\Caregiver
 php artisan migrate:fresh        # drops everything and re-runs migrations
 ```
 
-> Note: the `audiobooks` table is **not** in the migration set. If you've created it manually in phpMyAdmin, back it up first with `mysqldump -u root autism_audiobook audiobooks > audiobooks.sql` before running `migrate:fresh`.
+> If you already have data you want to preserve, use plain `php artisan migrate` instead — it only applies the migrations not yet recorded in the `migrations` table.
 
 ---
 

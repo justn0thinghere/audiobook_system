@@ -22,6 +22,9 @@ dependencies:
   audio_session: ^0.1.21
   flutter_tts: ^3.6.3
 
+  # Image picking for per-page storybook upload
+  image_picker: ^1.1.2
+
   # Typography
   google_fonts: ^6.2.1
 

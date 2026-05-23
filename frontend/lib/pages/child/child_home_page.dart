@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/content_item.dart';
+import '../../services/database_service.dart';
 import '../../state/profiles_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/soft_card.dart';
@@ -16,6 +18,7 @@ class ChildHomePage extends StatefulWidget {
 
 class _ChildHomePageState extends State<ChildHomePage> {
   String? _selectedMood;
+  ContentItem? _featured;
 
   static const List<_Mood> _moods = [
     _Mood('happy', 'Happy', '😊', AppColors.moodHappy),
@@ -23,6 +26,21 @@ class _ChildHomePageState extends State<ChildHomePage> {
     _Mood('curious', 'Curious', '🤔', AppColors.moodCurious),
     _Mood('sleepy', 'Sleepy', '😴', AppColors.moodSleepy),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeatured();
+  }
+
+  Future<void> _loadFeatured() async {
+    final resp = await DatabaseService.getContentList();
+    if (!mounted) return;
+    if (resp.success && resp.data is List<ContentItem>) {
+      final items = resp.data as List<ContentItem>;
+      setState(() => _featured = items.isNotEmpty ? items.first : null);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +100,10 @@ class _ChildHomePageState extends State<ChildHomePage> {
                 children: _moods.map((m) {
                   final selected = _selectedMood == m.id;
                   return InkWell(
-                    onTap: () => setState(() => _selectedMood = m.id),
+                    onTap: () {
+                      setState(() => _selectedMood = m.id);
+                      context.read<ProfilesState>().setMood(m.id);
+                    },
                     borderRadius: BorderRadius.circular(18),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -115,45 +136,51 @@ class _ChildHomePageState extends State<ChildHomePage> {
           ),
         ),
 
-        const SizedBox(height: 18),
-        InkWell(
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => const AudioPlayerPage(
-              title: 'The Gentle Dragon',
-              audiobookId: null,
-            ),
-          )),
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.primaryBlue,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 64, height: 64,
-                  decoration: const BoxDecoration(
-                    color: AppColors.surface,
-                    shape: BoxShape.circle,
+        if (_featured != null) ...[
+          const SizedBox(height: 18),
+          InkWell(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => AudioPlayerPage(
+                title: _featured!.title,
+                audiobookId: _featured!.audiobookId,
+              ),
+            )),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: const BoxDecoration(
+                      color: AppColors.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, size: 38),
                   ),
-                  child: const Icon(Icons.play_arrow_rounded, size: 38),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Continue Listening',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'The Gentle Dragon — Chapter 1',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-              ],
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Start a Story',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _featured!.title,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
+        ],
 
         const SizedBox(height: 14),
         SoftCard(

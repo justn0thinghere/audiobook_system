@@ -10,6 +10,7 @@ import '../../audio/audio_engine.dart';
 import '../../models/audiobook.dart';
 import '../../models/user_settings.dart';
 import '../../services/database_service.dart';
+import '../../state/profiles_state.dart';
 import '../../state/settings_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
@@ -31,7 +32,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   final PageController _pageController = PageController();
 
   Audiobook? _audiobook;
-  List<String> _pages = [];
+  List<_PlayerPage> _pages = [];
   bool _loading = true;
   bool _audioReady = false;
   bool _playingAudio = false;
@@ -42,6 +43,13 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
 
   int _highlightStart = 0;
   int _highlightEnd = 0;
+
+  // Listening-session tracking (UC-8 -> records into listening_history).
+  final Stopwatch _listenWatch = Stopwatch();
+  String? _activeChildId;
+  String? _sessionMood;
+  bool _reachedEnd = false;
+  bool _sessionRecorded = false;
 
   static const _defaultStoryText =
       'A gentle dragon lives in a quiet meadow where every day feels warm and safe. '
@@ -60,10 +68,43 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Capture the active child + their selected mood while a context is
+    // available, so we can still record the session from dispose().
+    final profiles = context.read<ProfilesState>();
+    _activeChildId ??= profiles.activeProfile?.childId;
+    _sessionMood = profiles.currentMood;
+  }
+
+  @override
   void dispose() {
+    _listenWatch.stop();
+    _recordSessionIfNeeded();
     _pageController.dispose();
     _flutterTts.stop();
     super.dispose();
+  }
+
+  /// Persists the just-finished listening session. Fire-and-forget — safe to
+  /// call from dispose() because it uses captured values and the static
+  /// DatabaseService (no BuildContext needed).
+  void _recordSessionIfNeeded() {
+    if (_sessionRecorded) return;
+    final childId = _activeChildId;
+    final audiobookId = widget.audiobookId;
+    final seconds = _listenWatch.elapsed.inSeconds;
+    // Skip the built-in demo story (no real UUID) and trivially short visits.
+    if (childId == null || audiobookId == null || seconds < 3) return;
+    _sessionRecorded = true;
+    DatabaseService.recordListeningSession(
+      childId: childId,
+      audiobookId: audiobookId,
+      durationSeconds: seconds,
+      lastPositionSeconds: seconds,
+      mood: _sessionMood,
+      completed: _reachedEnd,
+    );
   }
 
   Future<void> _initTts() async {
@@ -74,6 +115,8 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       });
       _flutterTts.setCompletionHandler(() {
         if (!mounted) return;
+        _listenWatch.stop();
+        if (_page >= _pages.length - 1) _reachedEnd = true;
         setState(() {
           _ttsSpeaking = false;
           _highlightStart = 0;
@@ -86,6 +129,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       });
       _flutterTts.setCancelHandler(() {
         if (!mounted) return;
+        _listenWatch.stop();
         setState(() {
           _ttsSpeaking = false;
           _highlightStart = 0;
@@ -95,6 +139,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       _flutterTts.setErrorHandler((message) {
         debugPrint('TTS error: $message');
         if (!mounted) return;
+        _listenWatch.stop();
         setState(() {
           _ttsSpeaking = false;
           _highlightStart = 0;
@@ -126,7 +171,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
 
   Future<void> _loadAudiobook() async {
     if (widget.audiobookId == null) {
-      _pages = _splitContent(_defaultStoryText);
+      _pages = _pagesFromText(_defaultStoryText, null);
       if (mounted) setState(() => _loading = false);
       return;
     }
@@ -135,11 +180,26 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     final resp = await DatabaseService.getAudiobookData(widget.audiobookId!);
     if (!mounted) return;
 
-    if (resp.success && resp.data is Map<String, dynamic>) {
-      final book = Audiobook.fromJson(resp.data as Map<String, dynamic>);
+    // getAudiobookData returns an already-parsed Audiobook in resp.data.
+    if (resp.success && resp.data is Audiobook) {
+      final book = resp.data as Audiobook;
       _audiobook = book;
-      _pages = _splitContent(book.contentText ?? _defaultStoryText);
       _page = 0;
+      if (book.pages.isNotEmpty) {
+        // Caregiver-built storybook: one image + text per page.
+        _pages = book.pages
+            .map((p) => _PlayerPage(
+                  text: (p.text ?? '').trim(),
+                  imageUrl: p.image,
+                ))
+            .toList();
+      } else {
+        // Plain story text: paginate by sentences, share the cover image.
+        _pages = _pagesFromText(
+          book.contentText ?? _defaultStoryText,
+          book.coverImage,
+        );
+      }
       if (book.audioFile != null && book.audioFile!.isNotEmpty) {
         try {
           await _engine.loadAudio(book.audioFile!);
@@ -152,22 +212,21 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
         }
       }
     } else {
-      _pages = _splitContent(_defaultStoryText);
+      _pages = _pagesFromText(_defaultStoryText, null);
       _page = 0;
     }
 
     if (mounted) setState(() => _loading = false);
   }
 
-  List<String> _splitContent(String text) {
+  /// Split a long story into sentence-based pages, each sharing [imageUrl].
+  List<_PlayerPage> _pagesFromText(String text, String? imageUrl) {
     final sentences = text
         .split(RegExp(r'(?<=[.!?])\s+'))
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
-    if (sentences.isEmpty) return [text];
-
-    final pages = <String>[];
+    final chunks = <String>[];
     final buffer = StringBuffer();
     var sentenceCount = 0;
     for (final sentence in sentences) {
@@ -175,13 +234,14 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       buffer.write(sentence);
       sentenceCount++;
       if (sentenceCount >= 2 || buffer.length > 220) {
-        pages.add(buffer.toString());
+        chunks.add(buffer.toString());
         buffer.clear();
         sentenceCount = 0;
       }
     }
-    if (buffer.isNotEmpty) pages.add(buffer.toString());
-    return pages.isEmpty ? [text] : pages;
+    if (buffer.isNotEmpty) chunks.add(buffer.toString());
+    if (chunks.isEmpty) chunks.add(text);
+    return chunks.map((c) => _PlayerPage(text: c, imageUrl: imageUrl)).toList();
   }
 
   Future<void> _togglePlayPause() async {
@@ -195,8 +255,10 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     }
     if (_playingAudio) {
       await _engine.pause();
+      _listenWatch.stop();
     } else {
       await _engine.play();
+      _listenWatch.start();
     }
     if (mounted) setState(() => _playingAudio = !_playingAudio);
   }
@@ -216,7 +278,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       }
       return;
     }
-    final text = _pages[_page];
+    final text = _pages[_page].text;
     if (text.isEmpty) return;
     if (!mounted) return;
     final speed = context.read<SettingsState>().readingSpeed;
@@ -231,10 +293,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
         _highlightStart = 0;
         _highlightEnd = 0;
       });
+      _listenWatch.start();
       final result = await _flutterTts.speak(text);
       debugPrint('TTS speak result: $result');
       if (result != 1) {
         if (!mounted) return;
+        _listenWatch.stop();
         setState(() => _ttsSpeaking = false);
         AppSnackbar.warning(
           'Could not start narration. Check device volume and TTS engine.',
@@ -379,8 +443,8 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
               physics: const BouncingScrollPhysics(),
               itemBuilder: (context, index) {
                 final page = _StorybookPage(
-                  imageUrl: _audiobook?.coverImage,
-                  text: _pages[index],
+                  imageUrl: _pages[index].imageUrl ?? _audiobook?.coverImage,
+                  text: _pages[index].text,
                   highlightStart: (readAlongEnabled && index == _page && _ttsSpeaking)
                       ? _highlightStart
                       : 0,
@@ -626,6 +690,13 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       await _speakPage();
     }
   }
+}
+
+/// One renderable storybook page: its narration text and (optional) image.
+class _PlayerPage {
+  final String text;
+  final String? imageUrl;
+  const _PlayerPage({required this.text, this.imageUrl});
 }
 
 class _StorybookPage extends StatelessWidget {

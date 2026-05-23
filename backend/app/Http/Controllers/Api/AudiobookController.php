@@ -46,6 +46,7 @@ class AudiobookController extends Controller
                 'type'             => $audiobook->type,
                 'content_text'     => $audiobook->content_text,
                 'audio_file'       => $audiobook->audio_file ? asset($audiobook->audio_file) : null,
+                'video_file'       => $audiobook->video_file ? asset($audiobook->video_file) : null,
                 'cover_image'      => $audiobook->cover_image ? asset($audiobook->cover_image) : null,
                 'duration_minutes' => $audiobook->duration_minutes,
                 'language'         => $audiobook->language,
@@ -54,6 +55,12 @@ class AudiobookController extends Controller
                 'is_generated'     => (bool) $audiobook->is_generated,
                 'is_user_uploaded' => (bool) $audiobook->is_user_uploaded,
                 'status'           => $audiobook->status,
+                'pages'            => $audiobook->pages->map(fn ($p) => [
+                    'page_id'     => $p->page_id,
+                    'page_number' => $p->page_number,
+                    'text'        => $p->text,
+                    'image'       => $p->image ? asset($p->image) : null,
+                ])->toArray(),
                 'created_at'       => $audiobook->created_at
                     ? Carbon::parse($audiobook->created_at)->format('Y-m-d H:i:s')
                     : null,

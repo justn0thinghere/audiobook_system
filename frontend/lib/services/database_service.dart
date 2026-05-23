@@ -11,6 +11,7 @@ import '../models/caregiver.dart';
 import '../models/child_profile.dart';
 import '../models/content_item.dart';
 import '../models/content_summary.dart';
+import '../models/insights_overview.dart';
 import '../models/user_settings.dart';
 import 'api_service.dart';
 
@@ -61,6 +62,7 @@ class DatabaseService {
     String path, {
     Map<String, dynamic>? body,
     bool requireAuth = true,
+    Duration? timeout,
   }) async {
     if (!await _hasNetworkConnection()) {
       return ApiResponse.failure(
@@ -81,7 +83,7 @@ class DatabaseService {
             headers: _headers(sessionToken: token),
             body: jsonEncode(body ?? {}),
           )
-          .timeout(_timeout);
+          .timeout(timeout ?? _timeout);
 
       if (response.body.isEmpty) {
         return ApiResponse.failure('Empty response', error: 'EMPTY_BODY');
@@ -345,6 +347,89 @@ class DatabaseService {
     return _post('/content/create', body: payload);
   }
 
+  /// Add one page (text + optional image file) to an audiobook via multipart.
+  static Future<ApiResponse> addAudiobookPage({
+    required String audiobookId,
+    required int pageNumber,
+    String? text,
+    String? imagePath,
+  }) async {
+    if (!await _hasNetworkConnection()) {
+      return ApiResponse.failure(
+        'No internet connection. Please check your network settings.',
+        error: 'NO_CONNECTIVITY',
+      );
+    }
+    try {
+      final token = await _currentToken();
+      if (token == null || token.isEmpty) {
+        return ApiResponse.failure('Not signed in', error: 'NO_SESSION');
+      }
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/content/$audiobookId/pages'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+      request.fields['page_number'] = '$pageNumber';
+      if (text != null && text.isNotEmpty) request.fields['text'] = text;
+      if (imagePath != null && imagePath.isNotEmpty) {
+        request.files.add(await http.MultipartFile.fromPath('image', imagePath));
+      }
+
+      final streamed = await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamed);
+
+      if (response.body.isEmpty) {
+        return ApiResponse.failure('Empty response', error: 'EMPTY_BODY');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return ApiResponse.failure('Unexpected response shape', error: 'BAD_SHAPE');
+      }
+      return ApiResponse.fromBackend(decoded);
+    } on TimeoutException {
+      return ApiResponse.failure('Upload timed out', error: 'TIMEOUT');
+    } catch (e) {
+      return ApiResponse.failure('Upload failed: $e', error: 'UNKNOWN');
+    }
+  }
+
+  /// Ask Gemini AI to generate a story (and optionally a cover image) and save
+  /// it as a new audiobook. Returns the created ContentItem on success.
+  static Future<ApiResponse> generateAiContent({
+    required String topic,
+    String? ageGroup,
+    String? category,
+    String? difficulty,
+    String? tags,
+    String? sourceText,
+    bool generateImage = true,
+  }) async {
+    final resp = await _post(
+      '/content/generate',
+      timeout: const Duration(seconds: 120),
+      body: {
+        'topic': topic,
+        if (ageGroup != null && ageGroup.isNotEmpty) 'age_group': ageGroup,
+        if (category != null && category.isNotEmpty) 'category': category,
+        if (difficulty != null && difficulty.isNotEmpty) 'difficulty': difficulty,
+        if (tags != null && tags.isNotEmpty) 'tags': tags,
+        if (sourceText != null && sourceText.isNotEmpty) 'source_text': sourceText,
+        'generate_image': generateImage,
+      },
+    );
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: ContentItem.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
   // ---------- listening history ----------
 
   static Future<ApiResponse> recordListeningSession({
@@ -367,5 +452,19 @@ class DatabaseService {
 
   static Future<ApiResponse> listeningHistoryFor(String childId) {
     return _post('/listening-history/child/$childId');
+  }
+
+  // ---------- insights ----------
+
+  static Future<ApiResponse> getInsightsOverview() async {
+    final resp = await _post('/insights/overview');
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: InsightsOverview.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
   }
 }

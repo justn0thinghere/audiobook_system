@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AudiobookController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChildProfileController;
 use App\Http\Controllers\Api\ContentManagementController;
+use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\ListeningHistoryController;
 use App\Http\Controllers\Api\SettingsController;
 use Illuminate\Support\Facades\Route;
@@ -49,13 +50,19 @@ Route::middleware('session.auth')->group(function () {
     });
 
     Route::prefix('content')->group(function () {
-        Route::post('/summary', [ContentManagementController::class, 'getContentSummary']);
-        Route::post('/list',    [ContentManagementController::class, 'getContentList']);
-        Route::post('/create',  [ContentManagementController::class, 'createContent']);
+        Route::post('/summary',  [ContentManagementController::class, 'getContentSummary']);
+        Route::post('/list',     [ContentManagementController::class, 'getContentList']);
+        Route::post('/create',   [ContentManagementController::class, 'createContent']);
+        Route::post('/generate', [ContentManagementController::class, 'generateContent']);
+        Route::post('/{audiobookId}/pages', [ContentManagementController::class, 'addPage'])->whereUuid('audiobookId');
     });
 
     Route::prefix('listening-history')->group(function () {
         Route::post('/record',            [ListeningHistoryController::class, 'record']);
         Route::post('/child/{childId}',   [ListeningHistoryController::class, 'forProfile'])->whereUuid('childId');
+    });
+
+    Route::prefix('insights')->group(function () {
+        Route::post('/overview', [InsightsController::class, 'overview']);
     });
 });

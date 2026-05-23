@@ -5,7 +5,14 @@
       "Bash(flutter test *)",
       "Bash(flutter devices *)",
       "Bash(rm \"database/migrations/0001_01_01_000000_create_users_table.php\")",
-      "Bash(rm \"database/migrations/2025_05_16_000002_create_user_settings_table.php\")"
+      "Bash(rm \"database/migrations/2025_05_16_000002_create_user_settings_table.php\")",
+      "Bash(php -l app/Http/Controllers/Api/InsightsController.php)",
+      "Bash(php -l routes/api.php)",
+      "Bash(php -l app/Services/GeminiService.php)",
+      "Bash(php -l app/Http/Controllers/Api/ContentManagementController.php)",
+      "Bash(php -l database/migrations/2025_05_16_000005_add_video_to_audiobooks_table.php)",
+      "Bash(php -l app/Models/Audiobook.php)",
+      "Bash(powershell -Command \"\\(Get-Content .env\\) -replace 'GEMINI_TEXT_MODEL=gemini-2.0-flash', 'GEMINI_TEXT_MODEL=gemini-2.5-flash' | Set-Content .env -Encoding utf8\")"
     ]
   }
 }

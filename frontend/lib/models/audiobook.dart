@@ -1,5 +1,28 @@
 import '_json_helpers.dart';
 
+class AudiobookPage {
+  final String? pageId;
+  final int pageNumber;
+  final String? text;
+  final String? image;
+
+  const AudiobookPage({
+    this.pageId,
+    required this.pageNumber,
+    this.text,
+    this.image,
+  });
+
+  factory AudiobookPage.fromJson(Map<String, dynamic> json) {
+    return AudiobookPage(
+      pageId: safeNullableString(json['page_id']),
+      pageNumber: safeInt(json['page_number']) ?? 1,
+      text: safeNullableString(json['text']),
+      image: safeNullableString(json['image']),
+    );
+  }
+}
+
 class Audiobook {
   final String? audiobookId;
   final String title;
@@ -11,6 +34,7 @@ class Audiobook {
   final String? type;
   final String? contentText;
   final String? audioFile;
+  final String? videoFile;
   final String? sourceFile;
   final String? coverImage;
   final int? durationMinutes;
@@ -20,6 +44,7 @@ class Audiobook {
   final bool isGenerated;
   final bool isUserUploaded;
   final String? status;
+  final List<AudiobookPage> pages;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -34,6 +59,7 @@ class Audiobook {
     this.type,
     this.contentText,
     this.audioFile,
+    this.videoFile,
     this.sourceFile,
     this.coverImage,
     this.durationMinutes,
@@ -43,11 +69,19 @@ class Audiobook {
     this.isGenerated = false,
     this.isUserUploaded = false,
     this.status,
+    this.pages = const [],
     this.createdAt,
     this.updatedAt,
   });
 
   factory Audiobook.fromJson(Map<String, dynamic> json) {
+    final rawPages = json['pages'];
+    final pages = rawPages is List
+        ? rawPages
+            .whereType<Map<String, dynamic>>()
+            .map(AudiobookPage.fromJson)
+            .toList()
+        : <AudiobookPage>[];
     return Audiobook(
       audiobookId: safeNullableString(json['audiobook_id']),
       title: safeString(json['title'], 'Untitled'),
@@ -59,6 +93,7 @@ class Audiobook {
       type: safeNullableString(json['type']),
       contentText: safeNullableString(json['content_text']),
       audioFile: safeNullableString(json['audio_file']),
+      videoFile: safeNullableString(json['video_file']),
       sourceFile: safeNullableString(json['source_file']),
       coverImage: safeNullableString(json['cover_image']),
       durationMinutes: safeInt(json['duration_minutes']),
@@ -68,6 +103,7 @@ class Audiobook {
       isGenerated: safeBool(json['is_generated']),
       isUserUploaded: safeBool(json['is_user_uploaded']),
       status: safeNullableString(json['status']),
+      pages: pages,
       createdAt: safeDate(json['created_at']),
       updatedAt: safeDate(json['updated_at']),
     );
