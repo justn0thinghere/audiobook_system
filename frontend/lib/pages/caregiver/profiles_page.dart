@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../i18n/i18n.dart';
 import '../../models/child_profile.dart';
 import '../../state/profiles_state.dart';
 import '../../theme/app_colors.dart';
@@ -26,10 +27,10 @@ class ProfilesPage extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                'Child Profiles',
-                style: TextStyle(
+                context.tr('profiles.title'),
+                style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
@@ -45,7 +46,7 @@ class ProfilesPage extends StatelessWidget {
                 ),
               ),
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add Child'),
+              label: Text(context.tr('profiles.add_child')),
               onPressed: () => showDialog(
                 context: context,
                 builder: (_) => const AddChildDialog(),
@@ -77,11 +78,13 @@ class ProfilesPage extends StatelessWidget {
                           style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
-                      Text('Age ${p.age} • ${p.favoriteGenre}',
+                      Text(
+                          '${context.tr('caregiver.age')} ${p.age} • ${p.favoriteGenre}',
                           style: const TextStyle(
                               color: AppColors.textSecondary, fontSize: 13)),
                       const SizedBox(height: 2),
-                      Text('${p.listeningMinutes} min listened',
+                      Text(
+                          '${p.listeningMinutes} ${context.tr('profiles.minutes_listened')}',
                           style: const TextStyle(
                               color: AppColors.textSecondary, fontSize: 13)),
                     ],
@@ -98,8 +101,8 @@ class ProfilesPage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text('Enter',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  child: Text(context.tr('profiles.enter'),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ],
             ),

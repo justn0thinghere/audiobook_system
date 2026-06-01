@@ -12,6 +12,9 @@ class Audiobook extends Model
     use HasFactory;
 
     protected $table = 'audiobooks';
+    protected $primaryKey = 'audiobook_id';
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'audiobook_id',

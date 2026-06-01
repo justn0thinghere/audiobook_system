@@ -7,6 +7,7 @@ class ProfilesState extends ChangeNotifier {
   List<ChildProfile> _profiles = const [];
   ChildProfile? _activeProfile;
   String? _currentMood;
+  String? _ownerCaregiverId; // which caregiver the loaded profiles belong to
   bool _loading = false;
   String? _lastError;
 
@@ -29,7 +30,15 @@ class ProfilesState extends ChangeNotifier {
       _profiles.fold(0, (sum, p) => sum + p.listeningMinutes);
   int get averageEngagement => _profiles.isEmpty ? 0 : 87;
 
-  Future<void> refresh() async {
+  Future<void> refresh({String? caregiverId}) async {
+    // Switching to a different caregiver: drop the previous list right away so
+    // we never momentarily show another caregiver's children.
+    if (caregiverId != null && caregiverId != _ownerCaregiverId) {
+      _profiles = const [];
+      _activeProfile = null;
+      _ownerCaregiverId = caregiverId;
+      notifyListeners();
+    }
     _loading = true;
     notifyListeners();
     final resp = await DatabaseService.listChildProfiles();
@@ -37,6 +46,8 @@ class ProfilesState extends ChangeNotifier {
       _profiles = resp.data as List<ChildProfile>;
       _lastError = null;
     } else {
+      // Keep any existing list on failure so a transient error doesn't wipe
+      // a caregiver's children.
       _lastError = resp.message;
     }
     _loading = false;
@@ -96,6 +107,7 @@ class ProfilesState extends ChangeNotifier {
     _profiles = const [];
     _activeProfile = null;
     _currentMood = null;
+    _ownerCaregiverId = null;
     notifyListeners();
   }
 }

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Models\Audiobook;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -10,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
-class AudiobookController extends Controller
+class AudiobookController extends ApiController
 {
     public function getAudiobookData(Request $request, string $audiobookId): JsonResponse
     {
@@ -45,9 +44,9 @@ class AudiobookController extends Controller
                 'difficulty'       => $audiobook->difficulty,
                 'type'             => $audiobook->type,
                 'content_text'     => $audiobook->content_text,
-                'audio_file'       => $audiobook->audio_file ? asset($audiobook->audio_file) : null,
-                'video_file'       => $audiobook->video_file ? asset($audiobook->video_file) : null,
-                'cover_image'      => $audiobook->cover_image ? asset($audiobook->cover_image) : null,
+                'audio_file'       => $this->mediaUrl($audiobook->audio_file),
+                'video_file'       => $this->mediaUrl($audiobook->video_file),
+                'cover_image'      => $this->mediaUrl($audiobook->cover_image),
                 'duration_minutes' => $audiobook->duration_minutes,
                 'language'         => $audiobook->language,
                 'age_group'        => $audiobook->age_group,
@@ -56,10 +55,11 @@ class AudiobookController extends Controller
                 'is_user_uploaded' => (bool) $audiobook->is_user_uploaded,
                 'status'           => $audiobook->status,
                 'pages'            => $audiobook->pages->map(fn ($p) => [
-                    'page_id'     => $p->page_id,
-                    'page_number' => $p->page_number,
-                    'text'        => $p->text,
-                    'image'       => $p->image ? asset($p->image) : null,
+                    'page_id'        => $p->page_id,
+                    'page_number'    => $p->page_number,
+                    'text'           => $p->text,
+                    'image'          => $this->mediaUrl($p->image),
+                    'audio_start_ms' => $p->audio_start_ms,
                 ])->toArray(),
                 'created_at'       => $audiobook->created_at
                     ? Carbon::parse($audiobook->created_at)->format('Y-m-d H:i:s')
@@ -75,5 +75,33 @@ class AudiobookController extends Controller
             ]);
             return $this->errorResponse('Internal server error', 'SERVER_ERROR', 500);
         }
+    }
+
+    /**
+     * Locally-stored media (e.g. "storage/uploads/...") is made absolute;
+     * values that are already full URLs (e.g. AI image links) pass through.
+     */
+    /**
+     * Build an absolute URL for a stored relative path (e.g. "storage/uploads/..").
+     *
+     * Uses the INCOMING request's scheme+host instead of APP_URL, so the URL
+     * is always reachable by whatever client is asking — the Android emulator
+     * (which talks to the host as 10.0.2.2), a real phone on Wi-Fi, anything
+     * else. With APP_URL=http://localhost the emulator would never reach the
+     * static file and just_audio would silently fail, putting the player into
+     * its TTS fallback.
+     *
+     * Already-absolute URLs (Pollinations/Gemini links) pass through unchanged.
+     */
+    private function mediaUrl(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return null;
+        }
+        if (\Illuminate\Support\Str::startsWith($path, ['http://', 'https://'])) {
+            return $path;
+        }
+        $base = rtrim(request()->getSchemeAndHttpHost(), '/');
+        return $base . '/' . ltrim($path, '/');
     }
 }

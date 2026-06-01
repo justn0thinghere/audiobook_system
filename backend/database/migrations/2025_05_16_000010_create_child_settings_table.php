@@ -6,22 +6,28 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Per-child narration & sensory/playback settings. Each child profile gets
+     * its own row so caregivers can tune the experience separately per child.
+     */
     public function up(): void
     {
-        Schema::create('caregiver_settings', function (Blueprint $table) {
+        Schema::create('child_settings', function (Blueprint $table) {
             $table->uuid('setting_id')->primary();
-            $table->foreignUuid('caregiver_id')
+            $table->foreignUuid('child_id')
                 ->unique()
-                ->constrained('caregivers', 'caregiver_id')
+                ->constrained('child_profiles', 'child_id')
                 ->cascadeOnDelete();
             $table->enum('narrator_voice', [
                 'calm_female',
+                'gentle_female',
                 'warm_male',
                 'friendly_child',
                 'soothing_elder',
             ])->default('calm_female');
             $table->decimal('reading_speed', 3, 2)->default(1.00);
             $table->decimal('volume', 3, 2)->default(0.80);
+            $table->decimal('text_scale', 3, 2)->default(1.00);
             $table->boolean('reduced_animations')->default(true);
             $table->boolean('auto_play_next')->default(true);
             $table->boolean('read_along')->default(true);
@@ -31,6 +37,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('caregiver_settings');
+        Schema::dropIfExists('child_settings');
     }
 };

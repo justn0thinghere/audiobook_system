@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
+use App\Jobs\GenerateAudiobookImages;
 use App\Models\Audiobook;
 use App\Services\GeminiService;
 use Carbon\Carbon;
@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
-class ContentManagementController extends Controller
+class ContentManagementController extends ApiController
 {
     public function getContentSummary(Request $request): JsonResponse
     {
@@ -63,6 +63,12 @@ class ContentManagementController extends Controller
                 $query->where('age_group', $request->input('age_group'));
             }
 
+            // Language filter — books default to 'en' but the caregiver can
+            // generate Malay stories now, so let the library narrow to one.
+            if ($request->filled('language')) {
+                $query->where('language', strtolower($request->input('language')));
+            }
+
             $items = $query->get()->map(fn ($item) => $this->serialize($item))->toArray();
 
             return $this->successResponse('Content list retrieved successfully', [
@@ -87,8 +93,14 @@ class ContentManagementController extends Controller
             'description'  => 'nullable|string',
             'age_group'    => 'nullable|string|max:50',
             'is_generated' => 'nullable|boolean',
+            'language'     => 'nullable|in:en,ms',
             'source_file'  => 'nullable|file|mimes:pdf,txt,mp3,wav|max:10240',
-            'audio_file'   => 'nullable|file|mimes:mp3,wav|max:20480',
+            // Use mimetypes (content sniffing) rather than mimes (filename
+            // extension) and cover the common variants Android / iOS pickers
+            // actually return for MP3, WAV, M4A, AAC and Ogg files — Laravel's
+            // strict "mp3,wav" map sometimes rejects valid MP3s that come
+            // through as audio/mpeg or audio/mp4 on real devices.
+            'audio_file'   => 'nullable|file|max:20480|mimetypes:audio/mpeg,audio/mp3,audio/mpga,audio/wav,audio/x-wav,audio/wave,audio/vnd.wave,audio/x-pn-wav,audio/mp4,audio/x-m4a,audio/aac,audio/x-aac,audio/ogg,audio/vorbis,audio/flac,audio/webm',
             'video_file'   => 'nullable|file|mimes:mp4,mov,webm|max:51200',
             'cover_image'  => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
         ]);
@@ -135,6 +147,7 @@ class ContentManagementController extends Controller
                 'description'     => $request->input('description'),
                 'content_text'     => $request->input('content_text'),
                 'age_group'        => $request->input('age_group'),
+                'language'         => $request->input('language') ?: 'en',
                 'source_file'      => $sourceFilePath,
                 'audio_file'       => $audioFilePath,
                 'video_file'       => $videoFilePath,
@@ -168,6 +181,8 @@ class ContentManagementController extends Controller
             'tags'           => 'nullable|string',
             'source_text'    => 'nullable|string',
             'generate_image' => 'nullable|boolean',
+            'page_count'     => 'nullable|integer|min:1|max:20',
+            'language'       => 'nullable|in:en,ms',
         ]);
 
         if ($validator->fails()) {
@@ -191,17 +206,25 @@ class ContentManagementController extends Controller
                 $request->input('topic'),
                 $request->input('age_group'),
                 $request->input('source_text'),
+                $request->filled('page_count') ? (int) $request->input('page_count') : null,
+                $request->input('language'),
             );
 
-            $coverImagePath = null;
-            if ($request->boolean('generate_image')) {
-                $coverImagePath = $gemini->generateCoverImage(
-                    $story['image_prompt'] !== '' ? $story['image_prompt'] : $request->input('topic')
-                );
-            }
+            $generateImages = $request->boolean('generate_image');
 
+            // The story text is ready instantly. Each page image takes ~12s, so
+            // we save the book as "processing", then draw every page via the
+            // GenerateAudiobookImages job and flip it to "available".
+            //
+            // With QUEUE_CONNECTION=sync (the default here) the job runs inline
+            // during this request — no separate worker needed — so the book is
+            // already finished when we respond. With QUEUE_CONNECTION=database it
+            // runs in the background (needs `php artisan queue:work`) and the app
+            // shows a pending state until the job finishes.
             $content = Audiobook::create([
-                'title'            => $story['title'],
+                // Keep the caregiver's typed text as the title — don't rename it
+                // to the AI's invented title.
+                'title'            => trim((string) $request->input('topic')),
                 'topic'            => $request->input('topic'),
                 'category'         => $request->input('category'),
                 'difficulty'       => strtolower((string) $request->input('difficulty', 'easy')),
@@ -209,18 +232,36 @@ class ContentManagementController extends Controller
                 'tags'             => $request->input('tags'),
                 'content_text'     => $story['content'],
                 'age_group'        => $request->input('age_group'),
-                'cover_image'      => $coverImagePath,
+                'language'         => $request->input('language') ?: 'en',
                 'is_generated'     => true,
                 'is_user_uploaded' => true,
-                'status'           => 'available',
+                'status'           => $generateImages ? 'processing' : 'available',
             ]);
 
-            return $this->successResponse(
-                $coverImagePath
-                    ? 'AI story and cover image generated'
-                    : 'AI story generated (cover image unavailable on free tier)',
-                $this->serialize($content)
-            );
+            foreach ($story['pages'] as $i => $page) {
+                $content->pages()->create([
+                    'page_number'  => $i + 1,
+                    'text'         => $page['text'],
+                    'image_prompt' => $page['image_prompt'],
+                    'image'        => null,
+                ]);
+            }
+
+            if ($generateImages) {
+                @set_time_limit(0); // inline image generation can take ~1 minute
+                @ignore_user_abort(true); // finish even if the client navigates away
+                GenerateAudiobookImages::dispatch($content->audiobook_id);
+                $content->refresh(); // 'available' now if the job ran inline (sync)
+            }
+
+            $ready = $content->status === 'available';
+            $message = !$generateImages
+                ? 'AI story generated.'
+                : ($ready
+                    ? 'Your storybook is ready, with a picture on every page!'
+                    : 'Your storybook is being created — it will appear in the library when ready.');
+
+            return $this->successResponse($message, $this->serialize($content->load('pages')));
         } catch (\Throwable $e) {
             Log::error('AI generate content error', ['error' => $e->getMessage()]);
             return $this->errorResponse(
@@ -243,9 +284,11 @@ class ContentManagementController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'text'        => 'nullable|string',
-            'page_number' => 'nullable|integer|min:1',
-            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'text'           => 'nullable|string',
+            'page_number'    => 'nullable|integer|min:1',
+            'image'          => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            // Caregiver-supplied page boundary on the whole-book recording.
+            'audio_start_ms' => 'nullable|integer|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -265,9 +308,12 @@ class ContentManagementController extends Controller
             $pageNumber = (int) $request->input('page_number', $book->pages()->count() + 1);
 
             $page = $book->pages()->create([
-                'page_number' => $pageNumber,
-                'text'        => $request->input('text'),
-                'image'       => $imagePath,
+                'page_number'    => $pageNumber,
+                'text'           => $request->input('text'),
+                'image'          => $imagePath,
+                'audio_start_ms' => $request->filled('audio_start_ms')
+                    ? (int) $request->input('audio_start_ms')
+                    : null,
             ]);
 
             // First page's image doubles as the cover when none is set.
@@ -280,12 +326,27 @@ class ContentManagementController extends Controller
                 'page_id'     => $page->page_id,
                 'page_number' => $page->page_number,
                 'text'        => $page->text,
-                'image'       => $page->image ? url($page->image) : null,
+                'image'       => $this->mediaUrl($page->image),
             ]);
         } catch (\Throwable $e) {
             Log::error('Add page error', ['error' => $e->getMessage()]);
             return $this->errorResponse('Could not add page', 'SERVER_ERROR', 500);
         }
+    }
+
+    /**
+     * Turn a stored media reference into a usable URL. Locally-stored files
+     * (e.g. "storage/uploads/...") are made absolute; values that are already
+     * full URLs (e.g. AI image links) are returned unchanged.
+     */
+    private function mediaUrl(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return null;
+        }
+        return \Illuminate\Support\Str::startsWith($path, ['http://', 'https://'])
+            ? $path
+            : url($path);
     }
 
     private function serializePages(Audiobook $item): array
@@ -294,7 +355,7 @@ class ContentManagementController extends Controller
             'page_id'     => $p->page_id,
             'page_number' => $p->page_number,
             'text'        => $p->text,
-            'image'       => $p->image ? url($p->image) : null,
+            'image'       => $this->mediaUrl($p->image),
         ])->toArray();
     }
 
@@ -310,10 +371,10 @@ class ContentManagementController extends Controller
             'difficulty'       => $item->difficulty,
             'type'             => $item->type,
             'content_text'     => $item->content_text,
-            'audio_file'       => $item->audio_file ? url($item->audio_file) : null,
-            'video_file'       => $item->video_file ? url($item->video_file) : null,
-            'source_file'      => $item->source_file ? url($item->source_file) : null,
-            'cover_image'      => $item->cover_image ? url($item->cover_image) : null,
+            'audio_file'       => $this->mediaUrl($item->audio_file),
+            'video_file'       => $this->mediaUrl($item->video_file),
+            'source_file'      => $this->mediaUrl($item->source_file),
+            'cover_image'      => $this->mediaUrl($item->cover_image),
             'duration_minutes' => $item->duration_minutes,
             'language'         => $item->language,
             'age_group'        => $item->age_group,

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Models\Caregiver;
 use App\Models\CaregiverSettings;
 use Carbon\Carbon;
@@ -12,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
-class AuthController extends Controller
+class AuthController extends ApiController
 {
     public function register(Request $request): JsonResponse
     {

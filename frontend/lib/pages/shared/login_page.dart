@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../i18n/i18n.dart';
 import '../../state/auth_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
@@ -30,11 +31,11 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _submit() async {
     if (_pinCtrl.text.length != 4) {
-      _toast('PIN must be 4 digits');
+      _toast(context.trRead('login.err_pin_4_digits'));
       return;
     }
     if (_isRegisterMode && _nameCtrl.text.trim().isEmpty) {
-      _toast('Name is required');
+      _toast(context.trRead('login.err_name_required'));
       return;
     }
     setState(() => _busy = true);
@@ -51,7 +52,7 @@ class _LoginPageState extends State<LoginPage> {
           );
     if (!mounted) return;
     setState(() => _busy = false);
-    if (!ok) _toast(auth.lastError ?? 'Authentication failed');
+    if (!ok) _toast(auth.lastError ?? context.trRead('login.err_auth_failed'));
   }
 
   void _toast(String msg) {
@@ -81,15 +82,18 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    _isRegisterMode ? 'Create caregiver account' : 'Welcome back',
+                    _isRegisterMode
+                        ? context.tr('login.create_account')
+                        : context.tr('login.welcome_back'),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                        fontSize: 22, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     _isRegisterMode
-                        ? 'Set up a 4-digit PIN to protect Child Mode'
-                        : 'Enter your caregiver PIN to continue',
+                        ? context.tr('login.subtitle_register')
+                        : context.tr('login.subtitle_login'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textSecondary),
                   ),
@@ -97,7 +101,8 @@ class _LoginPageState extends State<LoginPage> {
                   if (_isRegisterMode) ...[
                     TextField(
                       controller: _nameCtrl,
-                      decoration: const InputDecoration(hintText: 'Your name'),
+                      decoration: InputDecoration(
+                          hintText: context.tr('login.name_hint')),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -105,7 +110,9 @@ class _LoginPageState extends State<LoginPage> {
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
-                      hintText: _isRegisterMode ? 'Email (optional)' : 'Email',
+                      hintText: _isRegisterMode
+                          ? context.tr('login.email_optional')
+                          : context.tr('login.email'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -114,8 +121,8 @@ class _LoginPageState extends State<LoginPage> {
                     keyboardType: TextInputType.number,
                     obscureText: true,
                     maxLength: 4,
-                    decoration: const InputDecoration(
-                      hintText: '4-digit PIN',
+                    decoration: InputDecoration(
+                      hintText: context.tr('login.pin_hint'),
                       counterText: '',
                     ),
                   ),
@@ -137,7 +144,9 @@ class _LoginPageState extends State<LoginPage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Text(
-                              _isRegisterMode ? 'Create account' : 'Sign in',
+                              _isRegisterMode
+                                  ? context.tr('login.sign_up')
+                                  : context.tr('login.sign_in'),
                               style: const TextStyle(
                                   fontWeight: FontWeight.w700, fontSize: 16),
                             ),
@@ -150,8 +159,8 @@ class _LoginPageState extends State<LoginPage> {
                         : () => setState(() => _isRegisterMode = !_isRegisterMode),
                     child: Text(
                       _isRegisterMode
-                          ? 'Already have an account? Sign in'
-                          : "New here? Create a caregiver account",
+                          ? context.tr('login.toggle_to_login')
+                          : context.tr('login.toggle_to_register'),
                     ),
                   ),
                 ],

@@ -1,0 +1,653 @@
+/// Bilingual (English / Bahasa Malaysia) strings for the app.
+///
+/// Keep this file flat and grouped by screen for easy searching. When you add
+/// a key, add it to BOTH 'en' and 'ms' so untranslated strings can't slip in
+/// silently. The lookup falls back to English if a key is missing in Malay.
+class AppStrings {
+  AppStrings._();
+
+  static const supportedCodes = ['en', 'ms'];
+
+  /// Human-readable name for a language code (used in the picker).
+  static const Map<String, String> languageNames = {
+    'en': 'English',
+    'ms': 'Bahasa Malaysia',
+  };
+
+  static String get(String key, String code) =>
+      _data[code]?[key] ?? _data['en']?[key] ?? key;
+
+  static const Map<String, Map<String, String>> _data = {
+    'en': _en,
+    'ms': _ms,
+  };
+
+  // ---------------- ENGLISH ----------------
+  static const Map<String, String> _en = {
+    // Common
+    'common.save': 'Save',
+    'common.cancel': 'Cancel',
+    'common.delete': 'Delete',
+    'common.confirm': 'Confirm',
+    'common.edit': 'Edit',
+    'common.add': 'Add',
+    'common.upload': 'Upload',
+    'common.back': 'Back',
+    'common.next': 'Next',
+    'common.done': 'Done',
+    'common.continue': 'Continue',
+    'common.loading': 'Loading…',
+    'common.retry': 'Retry',
+    'common.search': 'Search',
+    'common.filter': 'Filter',
+    'common.all': 'All',
+    'common.yes': 'Yes',
+    'common.no': 'No',
+    'common.preview': 'Preview',
+    'common.english': 'English',
+    'common.malay': 'Bahasa Malaysia',
+
+    // Login / register
+    'login.welcome_back': 'Welcome back',
+    'login.create_account': 'Create caregiver account',
+    'login.subtitle_login': 'Enter your caregiver PIN to continue',
+    'login.subtitle_register': 'Set up a 4-digit PIN to protect Child Mode',
+    'login.name_hint': 'Your name',
+    'login.email_optional': 'Email (optional)',
+    'login.email': 'Email',
+    'login.pin_hint': '4-digit PIN',
+    'login.sign_in': 'Sign in',
+    'login.sign_up': 'Create account',
+    'login.toggle_to_login': 'Already have an account? Sign in',
+    'login.toggle_to_register': "New here? Create a caregiver account",
+    'login.err_pin_4_digits': 'PIN must be 4 digits',
+    'login.err_name_required': 'Name is required',
+    'login.err_auth_failed': 'Authentication failed',
+
+    // Guardian PIN
+    'guardian.title': 'Guardian PIN Required',
+    'guardian.subtitle': 'Enter PIN to exit Child Mode',
+    'guardian.err_wrong_pin': 'Incorrect PIN, please try again',
+    'guardian.caregiver_pin': 'Caregiver PIN',
+    'guardian.exit_child_mode': 'Exit Child\nMode',
+    'guardian.safety_note':
+        'Child Mode keeps your child safe with restricted navigation',
+
+    // Caregiver shell / dashboard
+    'caregiver.dashboard': 'Caregiver\nDashboard',
+    'caregiver.dashboard_short': 'Caregiver Dashboard',
+    'caregiver.logout': 'Log out',
+    'caregiver.confirm_logout': 'Log out of this device?',
+    'caregiver.tab_dashboard': 'Dashboard',
+    'caregiver.tab_profiles': 'Profiles',
+    'caregiver.tab_content': 'Content',
+    'caregiver.tab_settings': 'Settings',
+    'caregiver.tab_insights': 'Insights',
+    'caregiver.no_children': 'No child profiles yet',
+    'caregiver.no_children_hint': 'Add a child to start.',
+    'caregiver.enter_child_mode': 'Enter Child Mode',
+    'caregiver.dashboard_subtitle':
+        'Manage profiles and monitor learning progress',
+    'caregiver.stat_total_children': 'Total Children',
+    'caregiver.stat_total_minutes': 'Total Listening\nMinutes',
+    'caregiver.stat_total_books': 'Total\nAudiobooks',
+    'caregiver.stat_avg_engagement': 'Average\nEngagement',
+    'caregiver.section_profiles': 'Child Profiles',
+    'caregiver.empty_subtitle':
+        'Add your first child to start tracking listening time\nand entering Child Mode.',
+    'caregiver.add_first_child': 'Add your first child',
+    'caregiver.age': 'Age',
+    'caregiver.listening_time': 'Listening time:',
+    'caregiver.favorite_genre': 'Favorite genre:',
+    'caregiver.minutes_short': 'min',
+    'caregiver.logout_title': 'Logout?',
+    'caregiver.logout_body': 'You can sign back in at any time.',
+
+    // Profiles page
+    'profiles.title': 'Child Profiles',
+    'profiles.add_child': 'Add Child',
+    'profiles.remove_confirm': 'Remove this child profile?',
+    'profiles.remove_confirm_body':
+        'This will also remove the child\'s listening history. This cannot be undone.',
+    'profiles.years_old': 'years old',
+    'profiles.enter': 'Enter',
+    'profiles.minutes_listened': 'min listened',
+
+    // Add child dialog
+    'add_child.title': 'Add Child',
+    'add_child.edit_title': 'Edit child',
+    'add_child.name': 'Name',
+    'add_child.age': 'Age',
+    'add_child.avatar': 'Avatar',
+    'add_child.favorite_genre': 'Favourite genre (optional)',
+    'add_child.save_error': 'Could not create profile',
+
+    // Settings page
+    'settings.title': 'Settings',
+    'settings.subtitle':
+        'Narration and sensory settings are saved separately for each child.',
+    'settings.configuring_for': 'Configuring settings for',
+    'settings.narration': 'Narration',
+    'settings.narrator_voice': 'Narrator Voice',
+    'settings.reading_speed': 'Reading Speed',
+    'settings.slower': 'Slower',
+    'settings.faster': 'Faster',
+    'settings.sensory': 'Sensory & Playback',
+    'settings.reduced_animations': 'Reduced Animations',
+    'settings.reduced_animations_sub': 'Softer transitions and reduced motion',
+    'settings.auto_play_next': 'Auto-Play Next Story',
+    'settings.auto_play_next_sub': 'Automatically start the next audiobook',
+    'settings.read_along': 'Read Along',
+    'settings.read_along_sub': 'Highlight each word as the narrator speaks',
+    'settings.text_size': 'Text Size',
+    'settings.text_size_sub':
+        'Size of the story text the child reads along with',
+    'settings.text_size_preview': 'The quick brown fox.',
+    'settings.smaller': 'Smaller',
+    'settings.larger': 'Larger',
+    'settings.pin_change': 'PIN Change',
+    'settings.current_pin': 'Current PIN',
+    'settings.new_pin': 'New PIN',
+    'settings.confirm_pin': 'Confirm PIN',
+    'settings.update_pin': 'Update PIN',
+    'settings.pin_updated': 'PIN updated',
+    'settings.pin_mismatch': 'New PIN and confirmation do not match',
+    'settings.pin_update_failed': 'Could not update PIN',
+    'settings.language': 'Language',
+    'settings.language_sub': 'Choose the language for the app and AI stories',
+    'settings.no_children_title': 'No child profiles yet',
+    'settings.no_children_body':
+        'Add a child profile first — narration and sensory settings are configured per child.',
+
+    // Voice labels
+    'voice.calm_female': 'Calm Female',
+    'voice.gentle_female': 'Gentle Female',
+    'voice.warm_male': 'Warm Male',
+    'voice.friendly_child': 'Friendly Child',
+    'voice.soothing_elder': 'Soothing Elder',
+
+    // Content management
+    'content.title': 'Content\nManagement',
+    'content.subtitle': 'Upload and organize\neducational materials',
+    'content.total_items': 'Total Items',
+    'content.audio_files': 'Audio Files',
+    'content.text_files': 'Text Files',
+    'content.ai_generated': 'AI Generated',
+    'content.search_hint': 'Search content...',
+    'content.filter_by_type': 'Filter by type',
+    'content.filter_audio': 'Audio',
+    'content.filter_text': 'Text',
+    'content.filter_ai': 'AI Generated',
+    'content.tap_to_preview': 'Tap to preview',
+    'content.generating': 'Generating…',
+    'content.preview_still_generating':
+        'Still generating — you can preview once the pictures are ready.',
+    'content.preview_no_book': 'Nothing to preview for this item yet.',
+    'content.filter_by_language': 'Filter by language',
+    'content.filter_lang_all': 'All languages',
+    'content.filter_lang_en': 'English',
+    'content.filter_lang_ms': 'Bahasa Malaysia',
+
+    // Upload content
+    'upload.title': 'Upload Content',
+    'upload.mode_ai': 'AI generated',
+    'upload.mode_manual': 'Manual upload',
+    'upload.ai_prompt': 'Story idea',
+    'upload.ai_prompt_hint':
+        'e.g. A friendly fox who learns to take turns at the playground.',
+    'upload.ai_page_count': 'Number of pages',
+    'upload.ai_page_count_auto': 'Auto',
+    'upload.ai_language': 'Story language',
+    'upload.title_field': 'Title',
+    'upload.cover_image': 'Cover image',
+    'upload.cover_pick': 'Choose cover',
+    'upload.add_page': 'Add page',
+    'upload.page_n': 'Page',
+    'upload.page_text': 'Page text',
+    'upload.page_image': 'Page image',
+    'upload.submit': 'Submit',
+    'upload.generate': 'Generate',
+    'upload.pending':
+        'Generating — you can leave this page; the book will appear in your library when ready.',
+    'upload.story_language': 'Story language',
+    'upload.book_audio': 'Storybook audio (optional)',
+    'upload.book_audio_hint':
+        'Upload one recording of you reading the whole book. The app turns pages along with the audio.',
+    'upload.choose_audio': 'Choose audio file',
+    'upload.replace_audio': 'Replace audio',
+    'upload.clear': 'Remove',
+    'upload.page_boundaries': 'Page boundaries',
+    'upload.page_boundaries_hint':
+        'Play the recording and tap “Mark” when you hear each new page begin. Page 1 always starts at 0:00.',
+    'upload.mark_now': 'Mark',
+    'upload.remark': 'Re-mark',
+    'upload.page_one_auto': '0:00 (auto)',
+    'upload.page_label': 'Page',
+    'upload.mark_warning_backward':
+        'A page mark must come after the previous page.',
+    'upload.could_not_load_audio': 'Could not load audio for preview',
+
+    // Child shell / home
+    'child.home_greeting_morning': 'Good morning',
+    'child.home_greeting_afternoon': 'Good afternoon',
+    'child.home_greeting_evening': 'Good evening',
+    'child.how_are_you': 'How are you feeling?',
+    'child.mood_happy': 'Happy',
+    'child.mood_calm': 'Calm',
+    'child.mood_curious': 'Curious',
+    'child.mood_sleepy': 'Sleepy',
+    'child.featured': 'Today\'s pick',
+    'child.tab_home': 'Home',
+    'child.tab_stories': 'Stories',
+    'child.tab_exit': 'Exit',
+    'child.start_story': 'Start a Story',
+    'child.browse_library': 'Browse Story Library',
+    'child.browse_library_sub': 'Find a new favorite story',
+    'child.mood_question': 'How are you feeling today?',
+    'child.default_name': 'Friend',
+
+    // Story library
+    'library.title': 'Story Library',
+    'library.subtitle': 'Find your next favorite story',
+    'library.search_hint': 'Search for stories...',
+    'library.filters': 'Filters',
+    'library.category': 'Category',
+    'library.age_range': 'Age Range',
+    'library.no_stories_title': 'No stories yet',
+    'library.no_stories_body_error':
+        'We could not reach the library right now.\nPull down to try again.',
+    'library.no_stories_body_empty':
+        'Ask a caregiver to upload a story\nfrom the Content Management page.',
+    'library.no_match_title': 'No stories match your filters',
+    'library.no_match_body':
+        'Try a different category, age range, or search word.',
+    'library.clear_filters': 'Clear filters',
+    'library.stories_found': 'stories found',
+    'library.load_error': 'Could not load stories',
+
+    // Audio player
+    'player.listen': 'Listen',
+    'player.pause': 'Pause',
+    'player.preparing': 'Preparing…',
+    'player.back_btn': 'Back',
+    'player.next_btn': 'Next',
+    'player.read_along_mode': 'Read Along',
+    'player.audio_mode': 'Audio',
+    'player.helper_text':
+        'Tap Listen to hear the story. Words light up as they are read.',
+    'player.preview_helper':
+        'Preview only — changes are not saved to any child.',
+    'player.preview_banner':
+        'Preview mode — try the voice, speed and text size for this session. Changes are not saved.',
+    'player.finish_title': 'You finished the story!',
+    'player.finish_subtitle': 'Great reading! Well done. 💛',
+    'player.read_again': 'Read Again',
+    'player.finish_done': 'All Done',
+    'player.page_of': 'Page {current} of {total}',
+    'player.speed_slow': 'Slow',
+    'player.speed_normal': 'Normal',
+    'player.speed_fast': 'Fast',
+
+    // Snackbars / errors
+    'msg.no_connection': 'No internet connection. Please try again.',
+    'msg.try_again': 'Something went wrong. Please try again.',
+    'msg.narration_failed': 'Could not play the narration.',
+
+    // Insights
+    'insights.title': 'Insights',
+    'insights.subtitle': 'Listening activity and engagement reports',
+    'insights.load_error_title': 'Could not load insights',
+    'insights.load_error_body': 'Pull down to try again.',
+    'insights.empty_title': 'No listening activity yet',
+    'insights.empty_body':
+        'Enter Child Mode and play a story.\nInsights will appear here afterwards.',
+    'insights.total_minutes': 'Total listening\ntime',
+    'insights.total_sessions': 'Listening\nsessions',
+    'insights.stories_completed': 'Stories\ncompleted',
+    'insights.top_mood': 'Most-felt\nmood',
+    'insights.avg_session': 'Avg session\nlength',
+    'insights.streak': 'Listening\nstreak',
+    'insights.streak_days_short': 'd',
+    'insights.this_week': 'This week',
+    'insights.this_week_sub': 'Listening minutes per day',
+    'insights.minutes_short': 'min',
+    'insights.mood_breakdown': 'Mood breakdown',
+    'insights.top_stories': 'Top stories',
+    'insights.top_stories_sub': 'Most-listened in your library',
+    'insights.recent_activity': 'Recent activity',
+    'insights.recent_activity_sub': 'Last 10 listening sessions',
+    'insights.per_child': 'Per-child summary',
+    'insights.completion': 'Completion',
+    'insights.finished': 'Finished',
+    'insights.genre': 'Genre',
+    'insights.plays_short': 'plays',
+    'insights.completed_badge': 'Completed',
+    'insights.left_off_badge': 'Stopped early',
+    'insights.no_activity': 'No activity yet',
+    'insights.viewing': 'Viewing',
+    'insights.viewing_all': 'All children',
+
+    // Mood labels (used by insights breakdown — match child mood keys)
+    'insights.mood.happy': 'Happy',
+    'insights.mood.calm': 'Calm',
+    'insights.mood.curious': 'Curious',
+    'insights.mood.sleepy': 'Sleepy',
+  };
+
+  // ---------------- BAHASA MALAYSIA ----------------
+  static const Map<String, String> _ms = {
+    // Common
+    'common.save': 'Simpan',
+    'common.cancel': 'Batal',
+    'common.delete': 'Padam',
+    'common.confirm': 'Sahkan',
+    'common.edit': 'Sunting',
+    'common.add': 'Tambah',
+    'common.upload': 'Muat naik',
+    'common.back': 'Kembali',
+    'common.next': 'Seterusnya',
+    'common.done': 'Selesai',
+    'common.continue': 'Teruskan',
+    'common.loading': 'Memuatkan…',
+    'common.retry': 'Cuba lagi',
+    'common.search': 'Cari',
+    'common.filter': 'Tapis',
+    'common.all': 'Semua',
+    'common.yes': 'Ya',
+    'common.no': 'Tidak',
+    'common.preview': 'Pratonton',
+    'common.english': 'English',
+    'common.malay': 'Bahasa Malaysia',
+
+    // Login / register
+    'login.welcome_back': 'Selamat kembali',
+    'login.create_account': 'Cipta akaun penjaga',
+    'login.subtitle_login': 'Masukkan PIN penjaga anda untuk teruskan',
+    'login.subtitle_register':
+        'Sediakan PIN 4-digit untuk melindungi Mod Kanak-kanak',
+    'login.name_hint': 'Nama anda',
+    'login.email_optional': 'E-mel (pilihan)',
+    'login.email': 'E-mel',
+    'login.pin_hint': 'PIN 4-digit',
+    'login.sign_in': 'Log masuk',
+    'login.sign_up': 'Cipta akaun',
+    'login.toggle_to_login': 'Sudah ada akaun? Log masuk',
+    'login.toggle_to_register': 'Baharu di sini? Cipta akaun penjaga',
+    'login.err_pin_4_digits': 'PIN mesti 4 digit',
+    'login.err_name_required': 'Nama diperlukan',
+    'login.err_auth_failed': 'Pengesahan gagal',
+
+    // Guardian PIN
+    'guardian.title': 'PIN Penjaga Diperlukan',
+    'guardian.subtitle': 'Masukkan PIN untuk keluar Mod Kanak-kanak',
+    'guardian.err_wrong_pin': 'PIN tidak betul, sila cuba lagi',
+    'guardian.caregiver_pin': 'PIN Penjaga',
+    'guardian.exit_child_mode': 'Keluar Mod\nKanak-kanak',
+    'guardian.safety_note':
+        'Mod Kanak-kanak memastikan anak anda selamat dengan navigasi terhad',
+
+    // Caregiver shell / dashboard
+    'caregiver.dashboard': 'Papan Pemuka\nPenjaga',
+    'caregiver.dashboard_short': 'Papan Pemuka Penjaga',
+    'caregiver.logout': 'Log keluar',
+    'caregiver.confirm_logout': 'Log keluar dari peranti ini?',
+    'caregiver.tab_dashboard': 'Papan Pemuka',
+    'caregiver.tab_profiles': 'Profil',
+    'caregiver.tab_content': 'Kandungan',
+    'caregiver.tab_settings': 'Tetapan',
+    'caregiver.tab_insights': 'Wawasan',
+    'caregiver.no_children': 'Belum ada profil kanak-kanak',
+    'caregiver.no_children_hint': 'Tambah seorang kanak-kanak untuk mula.',
+    'caregiver.enter_child_mode': 'Masuk Mod Kanak-kanak',
+    'caregiver.dashboard_subtitle':
+        'Urus profil dan pantau kemajuan pembelajaran',
+    'caregiver.stat_total_children': 'Jumlah Kanak-kanak',
+    'caregiver.stat_total_minutes': 'Jumlah Minit\nMendengar',
+    'caregiver.stat_total_books': 'Jumlah\nBuku Audio',
+    'caregiver.stat_avg_engagement': 'Purata\nPenglibatan',
+    'caregiver.section_profiles': 'Profil Kanak-kanak',
+    'caregiver.empty_subtitle':
+        'Tambah kanak-kanak pertama untuk mula menjejak masa mendengar\ndan memasuki Mod Kanak-kanak.',
+    'caregiver.add_first_child': 'Tambah kanak-kanak pertama',
+    'caregiver.age': 'Umur',
+    'caregiver.listening_time': 'Masa mendengar:',
+    'caregiver.favorite_genre': 'Genre kegemaran:',
+    'caregiver.minutes_short': 'min',
+    'caregiver.logout_title': 'Log keluar?',
+    'caregiver.logout_body': 'Anda boleh log masuk semula bila-bila masa.',
+
+    // Profiles page
+    'profiles.title': 'Profil Kanak-kanak',
+    'profiles.add_child': 'Tambah Kanak-kanak',
+    'profiles.remove_confirm': 'Buang profil kanak-kanak ini?',
+    'profiles.remove_confirm_body':
+        'Sejarah mendengar kanak-kanak ini juga akan dibuang. Ini tidak boleh dibatalkan.',
+    'profiles.years_old': 'tahun',
+    'profiles.enter': 'Masuk',
+    'profiles.minutes_listened': 'min didengar',
+
+    // Add child dialog
+    'add_child.title': 'Tambah Kanak-kanak',
+    'add_child.edit_title': 'Sunting kanak-kanak',
+    'add_child.name': 'Nama',
+    'add_child.age': 'Umur',
+    'add_child.avatar': 'Avatar',
+    'add_child.favorite_genre': 'Genre kegemaran (pilihan)',
+    'add_child.save_error': 'Tidak dapat mencipta profil',
+
+    // Settings page
+    'settings.title': 'Tetapan',
+    'settings.subtitle':
+        'Tetapan suara dan sensori disimpan secara berasingan untuk setiap kanak-kanak.',
+    'settings.configuring_for': 'Menetapkan untuk',
+    'settings.narration': 'Suara Cerita',
+    'settings.narrator_voice': 'Suara Pencerita',
+    'settings.reading_speed': 'Kelajuan Bacaan',
+    'settings.slower': 'Lebih perlahan',
+    'settings.faster': 'Lebih laju',
+    'settings.sensory': 'Sensori & Main Balik',
+    'settings.reduced_animations': 'Animasi Dikurangkan',
+    'settings.reduced_animations_sub':
+        'Peralihan yang lebih lembut dan pergerakan dikurangkan',
+    'settings.auto_play_next': 'Main Cerita Seterusnya',
+    'settings.auto_play_next_sub': 'Mulakan buku audio seterusnya secara automatik',
+    'settings.read_along': 'Baca Bersama',
+    'settings.read_along_sub': 'Serlahkan setiap perkataan apabila pencerita bercakap',
+    'settings.text_size': 'Saiz Teks',
+    'settings.text_size_sub':
+        'Saiz teks cerita yang kanak-kanak baca bersama',
+    'settings.text_size_preview': 'Lompatan musang yang pantas.',
+    'settings.smaller': 'Lebih kecil',
+    'settings.larger': 'Lebih besar',
+    'settings.pin_change': 'Tukar PIN',
+    'settings.current_pin': 'PIN semasa',
+    'settings.new_pin': 'PIN baharu',
+    'settings.confirm_pin': 'Sahkan PIN',
+    'settings.update_pin': 'Kemas kini PIN',
+    'settings.pin_updated': 'PIN dikemas kini',
+    'settings.pin_mismatch': 'PIN baharu dan pengesahan tidak sepadan',
+    'settings.pin_update_failed': 'Tidak dapat mengemas kini PIN',
+    'settings.language': 'Bahasa',
+    'settings.language_sub':
+        'Pilih bahasa untuk aplikasi dan cerita AI',
+    'settings.no_children_title': 'Belum ada profil kanak-kanak',
+    'settings.no_children_body':
+        'Tambah profil kanak-kanak dahulu — tetapan suara dan sensori ditetapkan untuk setiap kanak-kanak.',
+
+    // Voice labels
+    'voice.calm_female': 'Perempuan Tenang',
+    'voice.gentle_female': 'Perempuan Lembut',
+    'voice.warm_male': 'Lelaki Mesra',
+    'voice.friendly_child': 'Kanak-kanak Mesra',
+    'voice.soothing_elder': 'Warga Emas Tenang',
+
+    // Content management
+    'content.title': 'Pengurusan\nKandungan',
+    'content.subtitle': 'Muat naik dan susun\nbahan pembelajaran',
+    'content.total_items': 'Jumlah Item',
+    'content.audio_files': 'Fail Audio',
+    'content.text_files': 'Fail Teks',
+    'content.ai_generated': 'Jana AI',
+    'content.search_hint': 'Cari kandungan...',
+    'content.filter_by_type': 'Tapis ikut jenis',
+    'content.filter_audio': 'Audio',
+    'content.filter_text': 'Teks',
+    'content.filter_ai': 'Jana AI',
+    'content.tap_to_preview': 'Ketik untuk pratonton',
+    'content.generating': 'Menjana…',
+    'content.preview_still_generating':
+        'Masih menjana — anda boleh pratonton apabila gambar sudah siap.',
+    'content.preview_no_book': 'Tiada apa untuk dipratonton bagi item ini.',
+    'content.filter_by_language': 'Tapis ikut bahasa',
+    'content.filter_lang_all': 'Semua bahasa',
+    'content.filter_lang_en': 'English',
+    'content.filter_lang_ms': 'Bahasa Malaysia',
+
+    // Upload content
+    'upload.title': 'Muat Naik Kandungan',
+    'upload.mode_ai': 'Jana dengan AI',
+    'upload.mode_manual': 'Muat naik manual',
+    'upload.ai_prompt': 'Idea cerita',
+    'upload.ai_prompt_hint':
+        'cth. Seekor musang mesra yang belajar bergilir di taman permainan.',
+    'upload.ai_page_count': 'Bilangan muka surat',
+    'upload.ai_page_count_auto': 'Automatik',
+    'upload.ai_language': 'Bahasa cerita',
+    'upload.title_field': 'Tajuk',
+    'upload.cover_image': 'Gambar muka depan',
+    'upload.cover_pick': 'Pilih muka depan',
+    'upload.add_page': 'Tambah muka surat',
+    'upload.page_n': 'Muka surat',
+    'upload.page_text': 'Teks muka surat',
+    'upload.page_image': 'Gambar muka surat',
+    'upload.submit': 'Hantar',
+    'upload.generate': 'Jana',
+    'upload.pending':
+        'Sedang menjana — anda boleh tinggalkan halaman ini; buku akan muncul dalam pustaka apabila siap.',
+    'upload.story_language': 'Bahasa cerita',
+    'upload.book_audio': 'Audio buku cerita (pilihan)',
+    'upload.book_audio_hint':
+        'Muat naik satu rakaman anda membaca seluruh buku. Aplikasi akan menukar muka surat mengikut audio.',
+    'upload.choose_audio': 'Pilih fail audio',
+    'upload.replace_audio': 'Tukar audio',
+    'upload.clear': 'Buang',
+    'upload.page_boundaries': 'Sempadan muka surat',
+    'upload.page_boundaries_hint':
+        'Mainkan rakaman dan ketik "Tanda" apabila anda dengar muka surat baharu bermula. Muka surat 1 sentiasa bermula pada 0:00.',
+    'upload.mark_now': 'Tanda',
+    'upload.remark': 'Tanda semula',
+    'upload.page_one_auto': '0:00 (auto)',
+    'upload.page_label': 'Muka surat',
+    'upload.mark_warning_backward':
+        'Tanda muka surat mesti selepas muka surat sebelumnya.',
+    'upload.could_not_load_audio':
+        'Tidak dapat memuatkan audio untuk pratonton',
+
+    // Child shell / home
+    'child.home_greeting_morning': 'Selamat pagi',
+    'child.home_greeting_afternoon': 'Selamat tengah hari',
+    'child.home_greeting_evening': 'Selamat petang',
+    'child.how_are_you': 'Bagaimana perasaan kamu?',
+    'child.mood_happy': 'Gembira',
+    'child.mood_calm': 'Tenang',
+    'child.mood_curious': 'Ingin tahu',
+    'child.mood_sleepy': 'Mengantuk',
+    'child.featured': 'Pilihan hari ini',
+    'child.tab_home': 'Laman',
+    'child.tab_stories': 'Cerita',
+    'child.tab_exit': 'Keluar',
+    'child.start_story': 'Mulakan Cerita',
+    'child.browse_library': 'Layari Pustaka Cerita',
+    'child.browse_library_sub': 'Cari cerita kegemaran baharu',
+    'child.mood_question': 'Bagaimana perasaan kamu hari ini?',
+    'child.default_name': 'Kawan',
+
+    // Story library
+    'library.title': 'Pustaka Cerita',
+    'library.subtitle': 'Cari cerita kegemaran kamu yang seterusnya',
+    'library.search_hint': 'Cari cerita...',
+    'library.filters': 'Penapis',
+    'library.category': 'Kategori',
+    'library.age_range': 'Lingkungan Umur',
+    'library.no_stories_title': 'Belum ada cerita',
+    'library.no_stories_body_error':
+        'Kami tidak dapat menghubungi pustaka sekarang.\nTarik ke bawah untuk cuba lagi.',
+    'library.no_stories_body_empty':
+        'Minta penjaga muat naik cerita\ndari halaman Pengurusan Kandungan.',
+    'library.no_match_title': 'Tiada cerita yang sepadan dengan penapis',
+    'library.no_match_body':
+        'Cuba kategori, lingkungan umur, atau perkataan carian yang berbeza.',
+    'library.clear_filters': 'Buang penapis',
+    'library.stories_found': 'cerita ditemui',
+    'library.load_error': 'Tidak dapat memuatkan cerita',
+
+    // Audio player
+    'player.listen': 'Dengar',
+    'player.pause': 'Jeda',
+    'player.preparing': 'Menyediakan…',
+    'player.back_btn': 'Kembali',
+    'player.next_btn': 'Seterusnya',
+    'player.read_along_mode': 'Baca Bersama',
+    'player.audio_mode': 'Audio',
+    'player.helper_text':
+        'Ketik Dengar untuk mendengar cerita. Perkataan akan menyala apabila dibaca.',
+    'player.preview_helper':
+        'Pratonton sahaja — perubahan tidak disimpan untuk mana-mana kanak-kanak.',
+    'player.preview_banner':
+        'Mod pratonton — cuba suara, kelajuan dan saiz teks untuk sesi ini. Perubahan tidak disimpan.',
+    'player.finish_title': 'Kamu sudah habis baca cerita!',
+    'player.finish_subtitle': 'Bagus sekali! Tahniah. 💛',
+    'player.read_again': 'Baca Lagi',
+    'player.finish_done': 'Selesai',
+    'player.page_of': 'Muka surat {current} daripada {total}',
+    'player.speed_slow': 'Perlahan',
+    'player.speed_normal': 'Sederhana',
+    'player.speed_fast': 'Laju',
+
+    // Snackbars / errors
+    'msg.no_connection':
+        'Tiada sambungan internet. Sila cuba lagi.',
+    'msg.try_again': 'Sesuatu tidak kena. Sila cuba lagi.',
+    'msg.narration_failed': 'Tidak dapat memainkan suara cerita.',
+
+    // Insights
+    'insights.title': 'Wawasan',
+    'insights.subtitle': 'Laporan aktiviti mendengar dan penglibatan',
+    'insights.load_error_title': 'Tidak dapat memuatkan wawasan',
+    'insights.load_error_body': 'Tarik ke bawah untuk cuba lagi.',
+    'insights.empty_title': 'Belum ada aktiviti mendengar',
+    'insights.empty_body':
+        'Masuk Mod Kanak-kanak dan main cerita.\nWawasan akan muncul di sini selepasnya.',
+    'insights.total_minutes': 'Jumlah masa\nmendengar',
+    'insights.total_sessions': 'Sesi\nmendengar',
+    'insights.stories_completed': 'Cerita\ndihabiskan',
+    'insights.top_mood': 'Mood\nteratas',
+    'insights.avg_session': 'Purata\nsesi',
+    'insights.streak': 'Streak\nharian',
+    'insights.streak_days_short': 'h',
+    'insights.this_week': 'Minggu ini',
+    'insights.this_week_sub': 'Minit mendengar setiap hari',
+    'insights.minutes_short': 'min',
+    'insights.mood_breakdown': 'Pecahan mood',
+    'insights.top_stories': 'Cerita popular',
+    'insights.top_stories_sub': 'Paling banyak didengar di pustaka anda',
+    'insights.recent_activity': 'Aktiviti terkini',
+    'insights.recent_activity_sub': '10 sesi mendengar terakhir',
+    'insights.per_child': 'Ringkasan setiap kanak-kanak',
+    'insights.completion': 'Penyiapan',
+    'insights.finished': 'Habis',
+    'insights.genre': 'Genre',
+    'insights.plays_short': 'kali main',
+    'insights.completed_badge': 'Habis',
+    'insights.left_off_badge': 'Berhenti awal',
+    'insights.no_activity': 'Belum ada aktiviti',
+    'insights.viewing': 'Lihat',
+    'insights.viewing_all': 'Semua kanak-kanak',
+
+    // Mood labels
+    'insights.mood.happy': 'Gembira',
+    'insights.mood.calm': 'Tenang',
+    'insights.mood.curious': 'Ingin tahu',
+    'insights.mood.sleepy': 'Mengantuk',
+  };
+}

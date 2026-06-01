@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../i18n/i18n.dart';
 import '../../services/database_service.dart';
 import '../../theme/app_colors.dart';
 
@@ -34,7 +35,7 @@ class _GuardianPinDialogState extends State<_GuardianPinDialog> {
   Future<void> _submit() async {
     final pin = _pinCtrl.text.trim();
     if (pin.length != 4) {
-      setState(() => _error = 'PIN must be 4 digits');
+      setState(() => _error = context.trRead('login.err_pin_4_digits'));
       return;
     }
     setState(() {
@@ -48,7 +49,7 @@ class _GuardianPinDialogState extends State<_GuardianPinDialog> {
     } else {
       setState(() {
         _verifying = false;
-        _error = 'Incorrect PIN, please try again';
+        _error = context.trRead('guardian.err_wrong_pin');
         _pinCtrl.clear();
       });
     }
@@ -81,21 +82,22 @@ class _GuardianPinDialogState extends State<_GuardianPinDialog> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Guardian PIN Required',
-                        style: TextStyle(
+                        context.tr('guardian.title'),
+                        style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'Enter PIN to exit Child Mode',
-                        style: TextStyle(color: AppColors.textSecondary),
+                        context.tr('guardian.subtitle'),
+                        style: const TextStyle(
+                            color: AppColors.textSecondary),
                       ),
                     ],
                   ),
@@ -105,9 +107,9 @@ class _GuardianPinDialogState extends State<_GuardianPinDialog> {
             const SizedBox(height: 18),
             const Divider(),
             const SizedBox(height: 14),
-            const Text(
-              'Caregiver PIN',
-              style: TextStyle(fontWeight: FontWeight.w700),
+            Text(
+              context.tr('guardian.caregiver_pin'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
             TextField(
@@ -156,9 +158,9 @@ class _GuardianPinDialogState extends State<_GuardianPinDialog> {
                       ),
                     ),
                     onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
+                    child: Text(
+                      context.tr('common.cancel'),
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
@@ -177,10 +179,10 @@ class _GuardianPinDialogState extends State<_GuardianPinDialog> {
                       ),
                     ),
                     onPressed: _submit,
-                    child: const Text(
-                      'Exit Child\nMode',
+                    child: Text(
+                      context.tr('guardian.exit_child_mode'),
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         height: 1.2,
                       ),
@@ -197,13 +199,13 @@ class _GuardianPinDialogState extends State<_GuardianPinDialog> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
-                children: const [
-                  Icon(Icons.lock_outline, size: 16),
-                  SizedBox(width: 8),
+                children: [
+                  const Icon(Icons.lock_outline, size: 16),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Child Mode keeps your child safe with restricted navigation',
-                      style: TextStyle(fontSize: 12),
+                      context.tr('guardian.safety_note'),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                 ],

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ChildProfile extends Model
 {
@@ -46,5 +47,10 @@ class ChildProfile extends Model
     public function listeningHistory(): HasMany
     {
         return $this->hasMany(ListeningHistory::class, 'child_id', 'child_id');
+    }
+
+    public function childSettings(): HasOne
+    {
+        return $this->hasOne(ChildSettings::class, 'child_id', 'child_id');
     }
 }

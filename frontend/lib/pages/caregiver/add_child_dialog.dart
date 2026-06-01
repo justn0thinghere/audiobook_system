@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../i18n/i18n.dart';
 import '../../models/child_profile.dart';
 import '../../state/profiles_state.dart';
 import '../../theme/app_colors.dart';
@@ -59,7 +60,8 @@ class _AddChildDialogState extends State<AddChildDialog> {
     if (ok) {
       Navigator.of(context).pop();
     } else {
-      AppSnackbar.error('Could not create profile', context: context);
+      AppSnackbar.error(context.trRead('add_child.save_error'),
+          context: context);
     }
   }
 
@@ -75,24 +77,27 @@ class _AddChildDialogState extends State<AddChildDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Add Child',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+              Text(
+                context.tr('add_child.title'),
+                style: const TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _nameCtrl,
-                decoration: const InputDecoration(hintText: 'Name'),
+                decoration: InputDecoration(
+                    hintText: context.tr('add_child.name')),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _ageCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(hintText: 'Age'),
+                decoration: InputDecoration(
+                    hintText: context.tr('add_child.age')),
               ),
               const SizedBox(height: 16),
-              const Text('Avatar',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              Text(context.tr('add_child.avatar'),
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 10,
@@ -129,7 +134,7 @@ class _AddChildDialogState extends State<AddChildDialog> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                      child: Text(context.tr('common.cancel')),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -149,8 +154,9 @@ class _AddChildDialogState extends State<AddChildDialog> {
                               width: 18, height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Save',
-                              style: TextStyle(fontWeight: FontWeight.w700)),
+                          : Text(context.tr('common.save'),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],

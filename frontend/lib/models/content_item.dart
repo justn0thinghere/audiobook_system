@@ -19,6 +19,7 @@ class ContentItem {
   final bool isGenerated;
   final bool isUserUploaded;
   final String? status;
+  final String? language; // 'en' or 'ms'
   final DateTime? createdAt;
 
   ContentItem({
@@ -40,6 +41,7 @@ class ContentItem {
     this.isGenerated = false,
     this.isUserUploaded = false,
     this.status,
+    this.language,
     this.createdAt,
   });
 
@@ -63,6 +65,7 @@ class ContentItem {
       isGenerated: safeBool(json['is_generated']),
       isUserUploaded: safeBool(json['is_user_uploaded']),
       status: safeNullableString(json['status']),
+      language: safeNullableString(json['language']),
       createdAt: safeDate(json['created_at']),
     );
   }
@@ -86,6 +89,7 @@ class ContentItem {
         'is_generated': isGenerated,
         'is_user_uploaded': isUserUploaded,
         'status': status,
+        'language': language,
         'created_at': createdAt?.toIso8601String(),
       };
 }

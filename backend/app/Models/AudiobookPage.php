@@ -21,11 +21,14 @@ class AudiobookPage extends Model
         'audiobook_id',
         'page_number',
         'text',
+        'image_prompt',
         'image',
+        'audio_start_ms',
     ];
 
     protected $casts = [
-        'page_number' => 'integer',
+        'page_number'    => 'integer',
+        'audio_start_ms' => 'integer',
     ];
 
     public function uniqueIds(): array

@@ -5,12 +5,17 @@ class AudiobookPage {
   final int pageNumber;
   final String? text;
   final String? image;
+  /// Offset (ms) from the start of the whole-book audio where this page
+  /// begins. Page 1 is implicitly 0; pages 2..N are null until the caregiver
+  /// marks boundaries in the upload screen.
+  final int? audioStartMs;
 
   const AudiobookPage({
     this.pageId,
     required this.pageNumber,
     this.text,
     this.image,
+    this.audioStartMs,
   });
 
   factory AudiobookPage.fromJson(Map<String, dynamic> json) {
@@ -19,6 +24,7 @@ class AudiobookPage {
       pageNumber: safeInt(json['page_number']) ?? 1,
       text: safeNullableString(json['text']),
       image: safeNullableString(json['image']),
+      audioStartMs: safeInt(json['audio_start_ms']),
     );
   }
 }

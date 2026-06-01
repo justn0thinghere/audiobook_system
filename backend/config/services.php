@@ -37,8 +37,13 @@ return [
 
     'gemini' => [
         'key'         => env('GEMINI_API_KEY'),
-        'text_model'  => env('GEMINI_TEXT_MODEL', 'gemini-2.0-flash'),
-        'image_model' => env('GEMINI_IMAGE_MODEL', 'gemini-2.0-flash-preview-image-generation'),
+        'text_model'  => env('GEMINI_TEXT_MODEL', 'gemini-2.5-flash'),
+        'image_model' => env('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image'),
+        // Image provider: 'pollinations' (free, no key) or 'gemini' (needs billing).
+        'image_provider' => env('GEMINI_IMAGE_PROVIDER', 'pollinations'),
+        // Optional free Pollinations token (auth.pollinations.ai) — lifts the
+        // rate limit so every page image can be downloaded immediately.
+        'pollinations_token' => env('POLLINATIONS_TOKEN', ''),
     ],
 
 ];

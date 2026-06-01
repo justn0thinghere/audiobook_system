@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../i18n/i18n.dart';
 import '../../models/content_item.dart';
 import '../../services/api_service.dart';
 import '../../services/database_service.dart';
@@ -29,11 +32,13 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
   final _searchCtrl = TextEditingController();
   String _category = 'all';
   String _ageRange = 'all';
+  String _language = 'all'; // 'all' | 'en' | 'ms'
   bool _filtersOpen = true;
 
   List<ContentItem> _stories = const [];
   bool _loading = true;
   String? _error;
+  Timer? _pollTimer;
 
   static const _filters = [
     _CategoryFilter('All', 'all', Icons.menu_book_outlined),
@@ -54,15 +59,18 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadStories() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _loadStories({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     final ApiResponse resp = await DatabaseService.getContentList();
     if (!mounted) return;
     if (resp.success && resp.data is List<ContentItem>) {
@@ -70,20 +78,39 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
         _stories = resp.data as List<ContentItem>;
         _loading = false;
       });
-    } else {
+    } else if (!silent) {
       setState(() {
         _stories = const [];
         _error = resp.message;
         _loading = false;
       });
-      AppSnackbar.error('Could not load stories: ${resp.message}',
+      AppSnackbar.error(
+          '${context.trRead('library.load_error')}: ${resp.message}',
           context: context);
+    }
+    _syncPolling();
+  }
+
+  /// Keep checking quietly while a book is still generating, so it appears the
+  /// moment its pictures are ready — then stop.
+  void _syncPolling() {
+    final stillGenerating = _stories.any((s) => s.status == 'processing');
+    if (stillGenerating) {
+      _pollTimer ??= Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _loadStories(silent: true),
+      );
+    } else {
+      _pollTimer?.cancel();
+      _pollTimer = null;
     }
   }
 
   List<ContentItem> get _filtered {
     final q = _searchCtrl.text.trim().toLowerCase();
     return _stories.where((s) {
+      // Hide books whose pictures are still being generated.
+      if (s.status == 'processing') return false;
       if (_category != 'all') {
         final c = (s.category ?? '').toLowerCase();
         if (c != _category) return false;
@@ -91,6 +118,12 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
       if (_ageRange != 'all') {
         final age = (s.ageGroup ?? '').toLowerCase();
         if (age != _ageRange) return false;
+      }
+      if (_language != 'all') {
+        // Books default to 'en' on the backend, so a null language counts as
+        // English for filter purposes.
+        final lang = (s.language ?? 'en').toLowerCase();
+        if (lang != _language) return false;
       }
       if (q.isNotEmpty) {
         final hay = '${s.title} ${s.author ?? ''} ${s.topic ?? ''} '
@@ -105,12 +138,14 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
   bool get _filtersActive =>
       _category != 'all' ||
       _ageRange != 'all' ||
+      _language != 'all' ||
       _searchCtrl.text.trim().isNotEmpty;
 
   void _clearFilters() {
     setState(() {
       _category = 'all';
       _ageRange = 'all';
+      _language = 'all';
       _searchCtrl.clear();
     });
   }
@@ -130,11 +165,11 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Story Library',
-                      style:
-                          TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                      context.tr('library.title'),
+                      style: const TextStyle(
+                          fontSize: 28, fontWeight: FontWeight.w700),
                     ),
                   ),
                   Container(
@@ -150,18 +185,18 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
                 ],
               ),
               const SizedBox(height: 6),
-              const Text(
-                'Find your next favorite story',
-                style: TextStyle(color: AppColors.textSecondary),
+              Text(
+                context.tr('library.subtitle'),
+                style: const TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _searchCtrl,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  hintText: 'Search for stories...',
-                  prefixIcon:
-                      Icon(Icons.search, color: AppColors.textMuted),
+                decoration: InputDecoration(
+                  hintText: context.tr('library.search_hint'),
+                  prefixIcon: const Icon(Icons.search,
+                      color: AppColors.textMuted),
                 ),
               ),
               const SizedBox(height: 12),
@@ -178,9 +213,9 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
                         children: [
                           const Icon(Icons.filter_alt_outlined, size: 18),
                           const SizedBox(width: 6),
-                          const Text(
-                            'Filters',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                          Text(
+                            context.tr('library.filters'),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           const Spacer(),
                           Icon(
@@ -193,9 +228,9 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
                     ),
                     if (_filtersOpen) ...[
                       const SizedBox(height: 14),
-                      const Text(
-                        'Category',
-                        style: TextStyle(
+                      Text(
+                        context.tr('library.category'),
+                        style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 13,
                         ),
@@ -219,9 +254,9 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
                         }).toList(),
                       ),
                       const SizedBox(height: 14),
-                      const Text(
-                        'Age Range',
-                        style: TextStyle(
+                      Text(
+                        context.tr('library.age_range'),
+                        style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 13,
                         ),
@@ -240,6 +275,40 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
                           );
                         }).toList(),
                       ),
+                      const SizedBox(height: 14),
+                      Text(
+                        context.tr('content.filter_by_language'),
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        alignment: WrapAlignment.start,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          SoftChip(
+                            label: context.tr('content.filter_lang_all'),
+                            selected: _language == 'all',
+                            selectedColor: AppColors.softMint,
+                            onTap: () => setState(() => _language = 'all'),
+                          ),
+                          SoftChip(
+                            label: context.tr('content.filter_lang_en'),
+                            selected: _language == 'en',
+                            selectedColor: AppColors.softMint,
+                            onTap: () => setState(() => _language = 'en'),
+                          ),
+                          SoftChip(
+                            label: context.tr('content.filter_lang_ms'),
+                            selected: _language == 'ms',
+                            selectedColor: AppColors.softMint,
+                            onTap: () => setState(() => _language = 'ms'),
+                          ),
+                        ],
+                      ),
                     ],
                   ],
                 ),
@@ -253,19 +322,18 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
               ] else if (_stories.isEmpty) ...[
                 EmptyState(
                   icon: Icons.menu_book_outlined,
-                  title: 'No stories yet',
+                  title: context.tr('library.no_stories_title'),
                   subtitle: _error != null
-                      ? 'We could not reach the library right now.\nPull down to try again.'
-                      : 'Ask a caregiver to upload a story\nfrom the Content Management page.',
+                      ? context.tr('library.no_stories_body_error')
+                      : context.tr('library.no_stories_body_empty'),
                   iconBackground: AppColors.softPink,
                   iconColor: AppColors.primaryBlueDark,
                 ),
               ] else if (stories.isEmpty) ...[
                 EmptyState(
                   icon: Icons.search_off_rounded,
-                  title: 'No stories match your filters',
-                  subtitle:
-                      'Try a different category, age range, or search word.',
+                  title: context.tr('library.no_match_title'),
+                  subtitle: context.tr('library.no_match_body'),
                   iconBackground: AppColors.softPeach,
                   iconColor: AppColors.warning,
                   action: FilledButton.icon(
@@ -278,12 +346,12 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
                     ),
                     onPressed: _filtersActive ? _clearFilters : null,
                     icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Clear filters'),
+                    label: Text(context.tr('library.clear_filters')),
                   ),
                 ),
               ] else ...[
                 Text(
-                  '${stories.length} stor${stories.length == 1 ? "y" : "ies"} found',
+                  '${stories.length} ${context.tr('library.stories_found')}',
                   style: const TextStyle(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 12),
@@ -423,6 +491,7 @@ class _CoverArt extends StatelessWidget {
           imageUrl!,
           fit: BoxFit.cover,
           width: double.infinity,
+          cacheWidth: 500, // grid covers don't need full 1024px; saves memory
           errorBuilder: (_, _, _) => _placeholder(),
           loadingBuilder: (context, child, progress) {
             if (progress == null) return child;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../i18n/i18n.dart';
 import '../../theme/app_colors.dart';
 import 'caregiver_dashboard_page.dart';
 import 'content_management_page.dart';
@@ -18,12 +19,13 @@ class CaregiverShell extends StatefulWidget {
 class _CaregiverShellState extends State<CaregiverShell> {
   late int _index = widget.initialIndex;
 
+  // Tab labels are translation keys; resolved in build via context.tr().
   static const _tabs = <_TabSpec>[
-    _TabSpec(Icons.home_outlined, 'Dashboard', AppColors.primaryBlue),
-    _TabSpec(Icons.people_outline, 'Profiles', AppColors.primaryBlue),
-    _TabSpec(Icons.upload_outlined, 'Content', AppColors.softPeach),
-    _TabSpec(Icons.bar_chart_outlined, 'Insights', AppColors.softMint),
-    _TabSpec(Icons.settings_outlined, 'Settings', AppColors.softMint),
+    _TabSpec(Icons.home_outlined, 'caregiver.tab_dashboard', AppColors.primaryBlue),
+    _TabSpec(Icons.people_outline, 'caregiver.tab_profiles', AppColors.primaryBlue),
+    _TabSpec(Icons.upload_outlined, 'caregiver.tab_content', AppColors.softPeach),
+    _TabSpec(Icons.bar_chart_outlined, 'caregiver.tab_insights', AppColors.softMint),
+    _TabSpec(Icons.settings_outlined, 'caregiver.tab_settings', AppColors.softMint),
   ];
 
   Widget _pageFor(int i) {
@@ -58,9 +60,10 @@ class _CaregiverShellState extends State<CaregiverShell> {
 
 class _TabSpec {
   final IconData icon;
-  final String label;
+  /// Translation key (e.g. 'caregiver.tab_dashboard') — resolved at render time.
+  final String labelKey;
   final Color highlight;
-  const _TabSpec(this.icon, this.label, this.highlight);
+  const _TabSpec(this.icon, this.labelKey, this.highlight);
 }
 
 class _CaregiverBottomNav extends StatelessWidget {
@@ -108,7 +111,7 @@ class _CaregiverBottomNav extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        t.label,
+                        context.tr(t.labelKey),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,

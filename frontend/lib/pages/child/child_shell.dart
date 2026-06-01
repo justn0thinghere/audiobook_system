@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../i18n/i18n.dart';
 import '../../state/profiles_state.dart';
+import '../../state/settings_state.dart';
 import '../../theme/app_colors.dart';
 import '../caregiver/caregiver_shell.dart';
 import '../shared/guardian_pin_dialog.dart';
@@ -17,6 +19,16 @@ class ChildShell extends StatefulWidget {
 
 class _ChildShellState extends State<ChildShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load the active child's narration & sensory settings for Child Mode.
+    final childId = context.read<ProfilesState>().activeProfile?.childId;
+    if (childId != null) {
+      context.read<SettingsState>().loadForChild(childId);
+    }
+  }
 
   Future<void> _attemptExit() async {
     final ok = await showGuardianPinDialog(context);
@@ -69,10 +81,10 @@ class _ChildBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tabs = const [
-      (icon: Icons.home_outlined, label: 'Home', color: AppColors.primaryBlue),
-      (icon: Icons.menu_book_outlined, label: 'Stories', color: AppColors.softMint),
-      (icon: Icons.logout, label: 'Exit', color: AppColors.softPeach),
+    final tabs = [
+      (icon: Icons.home_outlined, label: context.tr('child.tab_home'), color: AppColors.primaryBlue),
+      (icon: Icons.menu_book_outlined, label: context.tr('child.tab_stories'), color: AppColors.softMint),
+      (icon: Icons.logout, label: context.tr('child.tab_exit'), color: AppColors.softPeach),
     ];
 
     return Container(

@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Models\ChildProfile;
+use App\Models\ChildSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
-class ChildProfileController extends Controller
+class ChildProfileController extends ApiController
 {
     public function index(Request $request): JsonResponse
     {
@@ -86,6 +86,74 @@ class ChildProfileController extends Controller
         }
         $profile->delete();
         return $this->successResponse('Profile deleted');
+    }
+
+    /**
+     * Per-child narration & sensory/playback settings. Creates a default row
+     * the first time it's requested.
+     */
+    public function showSettings(Request $request, string $id): JsonResponse
+    {
+        $profile = $this->ownedProfile($request, $id);
+        if (!$profile) {
+            return $this->errorResponse('Profile not found', 'NOT_FOUND', 404);
+        }
+        $settings = $profile->childSettings
+            ?? ChildSettings::create(['child_id' => $profile->child_id]);
+        return $this->successResponse('OK', $this->serializeSettings($settings));
+    }
+
+    public function updateSettings(Request $request, string $id): JsonResponse
+    {
+        $profile = $this->ownedProfile($request, $id);
+        if (!$profile) {
+            return $this->errorResponse('Profile not found', 'NOT_FOUND', 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'narrator_voice'     => 'sometimes|in:' . implode(',', ChildSettings::ALLOWED_VOICES),
+            'reading_speed'      => 'sometimes|numeric|min:0.5|max:1.5',
+            'volume'             => 'sometimes|numeric|min:0|max:1',
+            'text_scale'         => 'sometimes|numeric|min:0.8|max:1.6',
+            'reduced_animations' => 'sometimes|boolean',
+            'auto_play_next'     => 'sometimes|boolean',
+            'read_along'         => 'sometimes|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse(
+                'Validation failed: ' . implode(', ', $validator->errors()->all()),
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
+        $settings = $profile->childSettings
+            ?? ChildSettings::create(['child_id' => $profile->child_id]);
+        $settings->fill($validator->validated())->save();
+
+        return $this->successResponse('Settings updated', $this->serializeSettings($settings));
+    }
+
+    private function ownedProfile(Request $request, string $id): ?ChildProfile
+    {
+        $caregiver = $request->get('auth_caregiver');
+        return $caregiver->childProfiles()->where('child_id', $id)->first();
+    }
+
+    private function serializeSettings(ChildSettings $s): array
+    {
+        return [
+            'setting_id'         => $s->setting_id,
+            'child_id'           => $s->child_id,
+            'narrator_voice'     => $s->narrator_voice,
+            'reading_speed'      => (float) $s->reading_speed,
+            'volume'             => (float) $s->volume,
+            'text_scale'         => (float) $s->text_scale,
+            'reduced_animations' => (bool) $s->reduced_animations,
+            'auto_play_next'     => (bool) $s->auto_play_next,
+            'read_along'         => (bool) $s->read_along,
+        ];
     }
 
     private function serialize(ChildProfile $p): array

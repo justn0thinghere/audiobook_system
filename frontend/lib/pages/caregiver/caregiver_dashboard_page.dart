@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../i18n/i18n.dart';
 import '../../models/child_profile.dart';
 import '../../navigation/app_navigation_service.dart';
 import '../../state/auth_state.dart';
@@ -32,10 +33,10 @@ class CaregiverDashboardPage extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                'Caregiver\nDashboard',
-                style: TextStyle(
+                context.tr('caregiver.dashboard'),
+                style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
                   height: 1.15,
@@ -64,14 +65,14 @@ class CaregiverDashboardPage extends StatelessWidget {
                 ),
               ),
               icon: const Icon(Icons.logout_rounded, size: 18),
-              label: const Text('Logout'),
+              label: Text(context.tr('caregiver.logout')),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Manage profiles and monitor learning progress',
-          style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+        Text(
+          context.tr('caregiver.dashboard_subtitle'),
+          style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 20),
 
@@ -87,25 +88,25 @@ class CaregiverDashboardPage extends StatelessWidget {
               icon: Icons.people_outline,
               iconBackground: AppColors.iconCircleBlue,
               value: '${profiles.totalChildren}',
-              label: 'Total Children',
+              label: context.tr('caregiver.stat_total_children'),
             ),
             StatCard(
               icon: Icons.access_time,
               iconBackground: AppColors.iconCircleGreen,
               value: '${profiles.totalListeningMinutes}',
-              label: 'Total Listening\nMinutes',
+              label: context.tr('caregiver.stat_total_minutes'),
             ),
-            const StatCard(
+            StatCard(
               icon: Icons.menu_book_outlined,
               iconBackground: AppColors.iconCirclePeach,
               value: '6',
-              label: 'Total\nAudiobooks',
+              label: context.tr('caregiver.stat_total_books'),
             ),
             StatCard(
               icon: Icons.psychology_outlined,
               iconBackground: AppColors.iconCirclePurple,
               value: '${profiles.averageEngagement}%',
-              label: 'Average\nEngagement',
+              label: context.tr('caregiver.stat_avg_engagement'),
             ),
           ],
         ),
@@ -113,10 +114,10 @@ class CaregiverDashboardPage extends StatelessWidget {
         const SizedBox(height: 22),
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                'Child Profiles',
-                style: TextStyle(
+                context.tr('caregiver.section_profiles'),
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
@@ -137,7 +138,7 @@ class CaregiverDashboardPage extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add Child'),
+              label: Text(context.tr('profiles.add_child')),
             ),
           ],
         ),
@@ -146,9 +147,8 @@ class CaregiverDashboardPage extends StatelessWidget {
         if (profiles.profiles.isEmpty)
           EmptyState(
             icon: Icons.child_care_rounded,
-            title: 'No child profiles yet',
-            subtitle:
-                'Add your first child to start tracking listening time\nand entering Child Mode.',
+            title: context.tr('caregiver.no_children'),
+            subtitle: context.tr('caregiver.empty_subtitle'),
             iconBackground: AppColors.iconCircleBlue,
             iconColor: AppColors.primaryBlueDark,
             action: FilledButton.icon(
@@ -164,7 +164,7 @@ class CaregiverDashboardPage extends StatelessWidget {
                 builder: (_) => const AddChildDialog(),
               ),
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add your first child'),
+              label: Text(context.tr('caregiver.add_first_child')),
             ),
           )
         else
@@ -218,7 +218,7 @@ class _ChildProfileCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Age ${profile.age}',
+                      '${context.tr('caregiver.age')} ${profile.age}',
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
@@ -241,14 +241,15 @@ class _ChildProfileCard extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Listening time:',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                  context.tr('caregiver.listening_time'),
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 14),
                 ),
               ),
               Text(
-                '${profile.listeningMinutes} min',
+                '${profile.listeningMinutes} ${context.tr('caregiver.minutes_short')}',
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
@@ -259,10 +260,11 @@ class _ChildProfileCard extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Favorite genre:',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                  context.tr('caregiver.favorite_genre'),
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 14),
                 ),
               ),
               Text(
@@ -287,9 +289,9 @@ class _ChildProfileCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              child: const Text(
-                'Enter Child Mode',
-                style: TextStyle(
+              child: Text(
+                context.tr('caregiver.enter_child_mode'),
+                style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -309,12 +311,12 @@ class _LogoutDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Logout?'),
-      content: const Text('You can sign back in at any time.'),
+      title: Text(context.tr('caregiver.logout_title')),
+      content: Text(context.tr('caregiver.logout_body')),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(context.tr('common.cancel')),
         ),
         FilledButton.icon(
           style: FilledButton.styleFrom(
@@ -337,7 +339,8 @@ class _LogoutDialog extends StatelessWidget {
             );
           },
           icon: const Icon(Icons.logout_rounded, size: 18),
-          label: const Text('Logout', style: TextStyle(fontWeight: FontWeight.w700)),
+          label: Text(context.tr('caregiver.logout'),
+              style: const TextStyle(fontWeight: FontWeight.w700)),
         ),
       ],
     );

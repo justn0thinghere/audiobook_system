@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Models\ChildProfile;
 use App\Models\ListeningHistory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
-class ListeningHistoryController extends Controller
+class ListeningHistoryController extends ApiController
 {
     public function record(Request $request): JsonResponse
     {

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ContentManagementController;
 use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\ListeningHistoryController;
 use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\TtsController;
 use Illuminate\Support\Facades\Route;
 
 // Health check
@@ -43,6 +44,8 @@ Route::middleware('session.auth')->group(function () {
         Route::post('/create',           [ChildProfileController::class, 'store']);
         Route::post('/{childId}/update', [ChildProfileController::class, 'update'])->whereUuid('childId');
         Route::post('/{childId}/delete', [ChildProfileController::class, 'destroy'])->whereUuid('childId');
+        Route::post('/{childId}/settings',        [ChildProfileController::class, 'showSettings'])->whereUuid('childId');
+        Route::post('/{childId}/settings/update', [ChildProfileController::class, 'updateSettings'])->whereUuid('childId');
     });
 
     Route::prefix('audiobooks')->group(function () {
@@ -65,4 +68,7 @@ Route::middleware('session.auth')->group(function () {
     Route::prefix('insights')->group(function () {
         Route::post('/overview', [InsightsController::class, 'overview']);
     });
+
+    // Natural-voice narration
+    Route::post('/tts/speak', [TtsController::class, 'speak']);
 });

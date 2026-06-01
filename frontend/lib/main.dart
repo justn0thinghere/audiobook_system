@@ -7,6 +7,7 @@ import 'navigation/app_routes.dart';
 
 // State
 import 'state/auth_state.dart';
+import 'state/language_state.dart';
 import 'state/profiles_state.dart';
 import 'state/settings_state.dart';
 
@@ -28,6 +29,7 @@ class AudiobookApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => LanguageState()..bootstrap()),
         ChangeNotifierProvider(create: (_) => AuthState()..bootstrap()),
         ChangeNotifierProvider(create: (_) => ProfilesState()),
         ChangeNotifierProvider(create: (_) => SettingsState()),
@@ -57,25 +59,38 @@ class _SessionScopedLoader extends StatefulWidget {
 
 class _SessionScopedLoaderState extends State<_SessionScopedLoader> {
   AuthStatus? _lastStatus;
+  String? _lastCaregiverId;
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
-    if (auth.status != _lastStatus) {
+    final caregiverId = auth.user?.caregiverId;
+    // Re-scope on status changes AND when the signed-in caregiver changes —
+    // so switching to a different account never shows the previous
+    // caregiver's child profiles or settings.
+    if (auth.status != _lastStatus || caregiverId != _lastCaregiverId) {
       _lastStatus = auth.status;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onStatusChanged(auth.status));
+      _lastCaregiverId = caregiverId;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _onAuthChanged(auth.status));
     }
     return const AuthGate();
   }
 
-  void _onStatusChanged(AuthStatus status) {
+  void _onAuthChanged(AuthStatus status) {
     if (!mounted) return;
+    final profiles = context.read<ProfilesState>();
+    final settings = context.read<SettingsState>();
     if (status == AuthStatus.signedIn) {
-      context.read<ProfilesState>().refresh();
-      context.read<SettingsState>().refresh();
+      // refresh() clears stale data only when the caregiver actually changes,
+      // and keeps a good list if the fetch hiccups — so a caregiver's children
+      // never vanish on sign-in. Settings are per-child and load on demand.
+      final caregiverId = context.read<AuthState>().user?.caregiverId;
+      settings.clear();
+      profiles.refresh(caregiverId: caregiverId);
     } else if (status == AuthStatus.signedOut) {
-      context.read<ProfilesState>().clear();
-      context.read<SettingsState>().clear();
+      profiles.clear();
+      settings.clear();
     }
   }
 }

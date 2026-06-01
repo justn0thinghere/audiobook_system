@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../i18n/i18n.dart';
 import '../../models/content_item.dart';
 import '../../services/database_service.dart';
 import '../../state/profiles_state.dart';
@@ -20,11 +21,12 @@ class _ChildHomePageState extends State<ChildHomePage> {
   String? _selectedMood;
   ContentItem? _featured;
 
+  // Mood `labelKey` is a translation key; resolved at render via context.tr().
   static const List<_Mood> _moods = [
-    _Mood('happy', 'Happy', '😊', AppColors.moodHappy),
-    _Mood('calm', 'Calm', '😌', AppColors.moodCalm),
-    _Mood('curious', 'Curious', '🤔', AppColors.moodCurious),
-    _Mood('sleepy', 'Sleepy', '😴', AppColors.moodSleepy),
+    _Mood('happy', 'child.mood_happy', '😊', AppColors.moodHappy),
+    _Mood('calm', 'child.mood_calm', '😌', AppColors.moodCalm),
+    _Mood('curious', 'child.mood_curious', '🤔', AppColors.moodCurious),
+    _Mood('sleepy', 'child.mood_sleepy', '😴', AppColors.moodSleepy),
   ];
 
   @override
@@ -38,14 +40,16 @@ class _ChildHomePageState extends State<ChildHomePage> {
     if (!mounted) return;
     if (resp.success && resp.data is List<ContentItem>) {
       final items = resp.data as List<ContentItem>;
-      setState(() => _featured = items.isNotEmpty ? items.first : null);
+      // Only feature a finished book (skip ones still generating pictures).
+      final ready = items.where((i) => i.status != 'processing').toList();
+      setState(() => _featured = ready.isNotEmpty ? ready.first : null);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final profile = context.watch<ProfilesState>().activeProfile;
-    final name = profile?.name ?? 'Friend';
+    final name = profile?.name ?? context.tr('child.default_name');
     final emoji = profile?.avatarEmoji ?? '🌸';
     final avatarColor = profile?.avatarColor ?? AppColors.softPink;
 
@@ -83,10 +87,11 @@ class _ChildHomePageState extends State<ChildHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Center(
+              Center(
                 child: Text(
-                  'How are you feeling today?',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  context.tr('child.mood_question'),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(height: 16),
@@ -123,7 +128,7 @@ class _ChildHomePageState extends State<ChildHomePage> {
                         children: [
                           Text(m.emoji, style: const TextStyle(fontSize: 36)),
                           const SizedBox(height: 4),
-                          Text(m.label,
+                          Text(context.tr(m.labelKey),
                               style: const TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.w700)),
                         ],
@@ -164,9 +169,10 @@ class _ChildHomePageState extends State<ChildHomePage> {
                     child: const Icon(Icons.play_arrow_rounded, size: 38),
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'Start a Story',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  Text(
+                    context.tr('child.start_story'),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -198,15 +204,17 @@ class _ChildHomePageState extends State<ChildHomePage> {
                 child: const Icon(Icons.menu_book_outlined),
               ),
               const SizedBox(width: 14),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Browse Story Library',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                    SizedBox(height: 2),
-                    Text('Find a new favorite story',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    Text(context.tr('child.browse_library'),
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(context.tr('child.browse_library_sub'),
+                        style: const TextStyle(
+                            color: AppColors.textSecondary, fontSize: 13)),
                   ],
                 ),
               ),
@@ -221,8 +229,9 @@ class _ChildHomePageState extends State<ChildHomePage> {
 
 class _Mood {
   final String id;
-  final String label;
+  /// Translation key for the mood label.
+  final String labelKey;
   final String emoji;
   final Color color;
-  const _Mood(this.id, this.label, this.emoji, this.color);
+  const _Mood(this.id, this.labelKey, this.emoji, this.color);
 }

@@ -20,10 +20,12 @@ dependencies:
   # Audio playback
   just_audio: ^0.9.42
   audio_session: ^0.1.21
-  flutter_tts: ^3.6.3
 
   # Image picking for per-page storybook upload
   image_picker: ^1.1.2
+
+  # Audio file picking for the whole-book narration upload
+  file_picker: ^8.0.0+1
 
   # Typography
   google_fonts: ^6.2.1

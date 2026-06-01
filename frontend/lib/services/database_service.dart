@@ -244,6 +244,37 @@ class DatabaseService {
     });
   }
 
+  /// Per-child narration & sensory/playback settings.
+  static Future<ApiResponse> getChildSettings(String childId) async {
+    final resp = await _post('/child-profiles/$childId/settings');
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: UserSettings.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
+  static Future<ApiResponse> updateChildSettings(
+    String childId,
+    UserSettings settings,
+  ) async {
+    final resp = await _post(
+      '/child-profiles/$childId/settings/update',
+      body: settings.toJson(),
+    );
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: UserSettings.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
   // ---------- child profiles ----------
 
   static Future<ApiResponse> listChildProfiles() async {
@@ -323,12 +354,14 @@ class DatabaseService {
     String? search,
     String? category,
     String? ageGroup,
+    String? language, // 'en' or 'ms' — narrows the library to one language
   }) async {
     final resp = await _post('/content/list', body: {
       if (filterType != null) 'filter_type': filterType,
       if (search != null && search.isNotEmpty) 'search': search,
       if (category != null && category.isNotEmpty) 'category': category,
       if (ageGroup != null && ageGroup.isNotEmpty) 'age_group': ageGroup,
+      if (language != null && language.isNotEmpty) 'language': language,
     });
     if (resp.success && resp.data is Map<String, dynamic>) {
       final items = (resp.data as Map<String, dynamic>)['items'];
@@ -347,12 +380,94 @@ class DatabaseService {
     return _post('/content/create', body: payload);
   }
 
+  /// Create an audiobook with an optional cover-image file (multipart).
+  /// Returns the created ContentItem (with its audiobook_id) on success.
+  static Future<ApiResponse> createContentWithCover({
+    required String title,
+    String? topic,
+    String? difficulty,
+    String? tags,
+    String? type,
+    String? contentText,
+    String? coverImagePath,
+    String? audioFilePath, // optional whole-book narration recording
+    String? language, // 'en' or 'ms'
+  }) async {
+    if (!await _hasNetworkConnection()) {
+      return ApiResponse.failure(
+        'No internet connection. Please check your network settings.',
+        error: 'NO_CONNECTIVITY',
+      );
+    }
+    try {
+      final token = await _currentToken();
+      if (token == null || token.isEmpty) {
+        return ApiResponse.failure('Not signed in', error: 'NO_SESSION');
+      }
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/content/create'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+      request.fields['title'] = title;
+      request.fields['type'] = type ?? 'Text';
+      request.fields['is_user_uploaded'] = '1';
+      if (topic != null && topic.isNotEmpty) request.fields['topic'] = topic;
+      if (difficulty != null && difficulty.isNotEmpty) {
+        request.fields['difficulty'] = difficulty;
+      }
+      if (tags != null && tags.isNotEmpty) request.fields['tags'] = tags;
+      if (contentText != null && contentText.isNotEmpty) {
+        request.fields['content_text'] = contentText;
+      }
+      if (coverImagePath != null && coverImagePath.isNotEmpty) {
+        request.files
+            .add(await http.MultipartFile.fromPath('cover_image', coverImagePath));
+      }
+      if (audioFilePath != null && audioFilePath.isNotEmpty) {
+        request.files
+            .add(await http.MultipartFile.fromPath('audio_file', audioFilePath));
+      }
+      if (language != null && language.isNotEmpty) {
+        request.fields['language'] = language;
+      }
+
+      final streamed = await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamed);
+      if (response.body.isEmpty) {
+        return ApiResponse.failure('Empty response', error: 'EMPTY_BODY');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return ApiResponse.failure('Unexpected response shape', error: 'BAD_SHAPE');
+      }
+      final resp = ApiResponse.fromBackend(decoded);
+      if (resp.success && resp.data is Map<String, dynamic>) {
+        return ApiResponse(
+          success: true,
+          message: resp.message,
+          data: ContentItem.fromJson(resp.data as Map<String, dynamic>),
+        );
+      }
+      return resp;
+    } on TimeoutException {
+      return ApiResponse.failure('Upload timed out', error: 'TIMEOUT');
+    } catch (e) {
+      return ApiResponse.failure('Upload failed: $e', error: 'UNKNOWN');
+    }
+  }
+
   /// Add one page (text + optional image file) to an audiobook via multipart.
   static Future<ApiResponse> addAudiobookPage({
     required String audiobookId,
     required int pageNumber,
     String? text,
     String? imagePath,
+    /// Offset (ms) of this page in the whole-book audio. Null = unmarked;
+    /// page 1 is implicitly 0 so passing 0 is also fine.
+    int? audioStartMs,
   }) async {
     if (!await _hasNetworkConnection()) {
       return ApiResponse.failure(
@@ -376,6 +491,9 @@ class DatabaseService {
       if (text != null && text.isNotEmpty) request.fields['text'] = text;
       if (imagePath != null && imagePath.isNotEmpty) {
         request.files.add(await http.MultipartFile.fromPath('image', imagePath));
+      }
+      if (audioStartMs != null && audioStartMs >= 0) {
+        request.fields['audio_start_ms'] = '$audioStartMs';
       }
 
       final streamed = await request.send().timeout(const Duration(seconds: 60));
@@ -406,10 +524,13 @@ class DatabaseService {
     String? tags,
     String? sourceText,
     bool generateImage = true,
+    int? pageCount,
+    String? language, // 'en' or 'ms' — tells Gemini which language to write in
   }) async {
     final resp = await _post(
       '/content/generate',
-      timeout: const Duration(seconds: 120),
+      // Images generate inline (~12s/page), so allow time for a few pages.
+      timeout: const Duration(seconds: 180),
       body: {
         'topic': topic,
         if (ageGroup != null && ageGroup.isNotEmpty) 'age_group': ageGroup,
@@ -418,6 +539,8 @@ class DatabaseService {
         if (tags != null && tags.isNotEmpty) 'tags': tags,
         if (sourceText != null && sourceText.isNotEmpty) 'source_text': sourceText,
         'generate_image': generateImage,
+        if (pageCount != null) 'page_count': pageCount,
+        if (language != null && language.isNotEmpty) 'language': language,
       },
     );
     if (resp.success && resp.data is Map<String, dynamic>) {
@@ -426,6 +549,30 @@ class DatabaseService {
         message: resp.message,
         data: ContentItem.fromJson(resp.data as Map<String, dynamic>),
       );
+    }
+    return resp;
+  }
+
+  /// Generate (or reuse) natural-voice narration for a page of text via Gemini
+  /// TTS. Returns the audio URL string in `data` on success.
+  static Future<ApiResponse> getNaturalVoiceUrl({
+    required String text,
+    String? voice,
+  }) async {
+    final resp = await _post(
+      '/tts/speak',
+      timeout: const Duration(seconds: 70),
+      body: {
+        'text': text,
+        if (voice != null && voice.isNotEmpty) 'voice': voice,
+      },
+    );
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      final url = (resp.data as Map<String, dynamic>)['audio_url'];
+      if (url is String && url.isNotEmpty) {
+        return ApiResponse(success: true, message: resp.message, data: url);
+      }
+      return ApiResponse.failure('No audio was returned', error: 'NO_AUDIO');
     }
     return resp;
   }
@@ -456,8 +603,10 @@ class DatabaseService {
 
   // ---------- insights ----------
 
-  static Future<ApiResponse> getInsightsOverview() async {
-    final resp = await _post('/insights/overview');
+  static Future<ApiResponse> getInsightsOverview({String? childId}) async {
+    final resp = await _post('/insights/overview', body: {
+      if (childId != null && childId.isNotEmpty) 'child_id': childId,
+    });
     if (resp.success && resp.data is Map<String, dynamic>) {
       return ApiResponse(
         success: true,
