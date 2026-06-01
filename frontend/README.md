@@ -35,15 +35,18 @@ For step-by-step instructions on connecting a physical Android phone (firewall r
 lib/
   main.dart                  App root + MultiProvider + named routes
   config/app_config.dart     API base URL (LAN IP for phone testing)
-  navigation/                AppNavigationService (global keys) + AppRoutes
-  models/                    JSON shapes — Caregiver, ChildProfile,
-                             UserSettings, Audiobook, ContentItem, …
+  i18n/                      AppStrings (en / ms flat maps) + BuildContext.tr
+  navigation/                AppNavigationService (global key) + AppRoutes
+  models/                    JSON shapes — Caregiver, ChildProfile, ChildSettings,
+                             UserSettings, Audiobook, AudiobookPage, ContentItem,
+                             ListeningSession, InsightsOverview, …
   services/
     api_service.dart         ApiResponse wrapper
     database_service.dart    REST client (auth, profiles, settings, content,
-                             listening history)
+                             AI generation, TTS, listening history, insights)
   state/                     ChangeNotifier providers:
-                             AuthState, ProfilesState, SettingsState
+                             AuthState, ProfilesState, SettingsState,
+                             LanguageState
   theme/                     AppColors palette + AppTheme (Nunito + Material 3)
   audio/audio_engine.dart    Thin wrapper around just_audio + audio_session
   widgets/
@@ -52,10 +55,12 @@ lib/
     back_pill.dart           Compact circular back button
     stat_card.dart           Dashboard stat tile (overflow-safe)
     app_snackbar.dart        Themed snackbar (info / success / warning / error)
+    empty_state.dart         Themed empty-state placeholder
   pages/
     shared/                  AuthGate, LoginPage, GuardianPinDialog
-    caregiver/               CaregiverShell + Dashboard, Profiles, Content
-                             Management, Upload Content, Insights, Settings,
+    caregiver/               CaregiverShell + Dashboard, Profiles,
+                             ContentManagement, UploadContent (with the
+                             PageBoundariesEditor), Insights, Settings,
                              AddChildDialog
     child/                   ChildShell + Home, StoryLibrary, AudioPlayerPage
 ```
@@ -64,10 +69,11 @@ lib/
 
 ## Architecture notes
 
-- **State** — three top-level `ChangeNotifier` providers (`AuthState`, `ProfilesState`, `SettingsState`) are bootstrapped in [main.dart](lib/main.dart) and consumed throughout via `context.watch` / `context.read`.
-- **Routing** — every page has a constant in [navigation/app_routes.dart](lib/navigation/app_routes.dart). The audio player takes typed arguments via `onGenerateRoute`. Routes can be pushed from anywhere via [`AppNavigationService.pushNamed`](lib/navigation/app_navigation_service.dart) (uses a global navigator key, so it also works from services and background callbacks).
+- **State** — four top-level `ChangeNotifier` providers (`AuthState`, `ProfilesState`, `SettingsState`, `LanguageState`) are bootstrapped in [main.dart](lib/main.dart) and consumed throughout via `context.watch` / `context.read`. `SettingsState` holds **per-child** settings keyed by `child_id`; entering child mode loads that child's row.
+- **Routing** — every page has a constant in [navigation/app_routes.dart](lib/navigation/app_routes.dart). The audio player takes typed arguments via `onGenerateRoute`. Routes can be pushed from anywhere via [`AppNavigationService.pushNamed`](lib/navigation/app_navigation_service.dart) (uses a global navigator key, so it works from services and background callbacks too).
 - **Session** — `DatabaseService` reads the token from `SharedPreferences` and adds `Authorization: Bearer <token>` to every protected request automatically.
-- **Audio** — child page uses [`flutter_tts`](https://pub.dev/packages/flutter_tts) for read-along with word-level offsets; pre-recorded MP3/WAV audiobooks play through [`just_audio`](https://pub.dev/packages/just_audio).
+- **Audio** — all playback goes through [`AudioEngine`](lib/audio/audio_engine.dart), a thin wrapper over `just_audio`. AI narration uses per-page WAV clips rendered server-side by Gemini TTS (cached on the backend by SHA-1 of voice|text). Pre-recorded books load the caregiver's MP3 / WAV directly; if the caregiver marked page boundaries at upload, the player auto-flips pages on each boundary, otherwise it uses a word-count heuristic.
+- **i18n** — strings live in [`lib/i18n/app_strings.dart`](lib/i18n/app_strings.dart) as two flat `en` / `ms` Maps. Use `context.tr('some.key')` everywhere; `LanguageState` controls the active language and persists it via `SharedPreferences`.
 - **Snackbars** — never use the raw `ScaffoldMessenger.of(context).showSnackBar` — call [`AppSnackbar.info/success/warning/error`](lib/widgets/app_snackbar.dart) instead so messages match the app's pastel theme.
 
 ---
@@ -81,5 +87,8 @@ lib/
 | API base URL | [lib/config/app_config.dart](lib/config/app_config.dart) |
 | Theme & palette | [lib/theme/app_colors.dart](lib/theme/app_colors.dart), [lib/theme/app_theme.dart](lib/theme/app_theme.dart) |
 | Route table | [lib/navigation/app_routes.dart](lib/navigation/app_routes.dart) |
-| Audio player + read-along | [lib/pages/child/audio_player_page.dart](lib/pages/child/audio_player_page.dart) |
-| Caregiver settings page | [lib/pages/caregiver/settings_page.dart](lib/pages/caregiver/settings_page.dart) |
+| Audio player + read-along + auto-flip | [lib/pages/child/audio_player_page.dart](lib/pages/child/audio_player_page.dart) |
+| Upload page + page-boundary editor | [lib/pages/caregiver/upload_content_page.dart](lib/pages/caregiver/upload_content_page.dart) |
+| Per-child Settings page | [lib/pages/caregiver/settings_page.dart](lib/pages/caregiver/settings_page.dart) |
+| Insights page (chart + per-child) | [lib/pages/caregiver/insights_page.dart](lib/pages/caregiver/insights_page.dart) |
+| i18n strings (en / ms) | [lib/i18n/app_strings.dart](lib/i18n/app_strings.dart) |
