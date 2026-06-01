@@ -12,8 +12,6 @@ class GeminiService
     private string $key;
     private string $textModel;
     private string $imageModel;
-    private string $imageProvider;
-    private string $pollinationsToken;
     private string $base = 'https://generativelanguage.googleapis.com/v1beta/models';
 
     /** Human-readable reason the last image generation failed (null when it succeeded). */
@@ -24,29 +22,6 @@ class GeminiService
         $this->key = (string) config('services.gemini.key');
         $this->textModel = (string) config('services.gemini.text_model');
         $this->imageModel = (string) config('services.gemini.image_model');
-        $this->imageProvider = (string) config('services.gemini.image_provider', 'pollinations');
-        $this->pollinationsToken = (string) config('services.gemini.pollinations_token', '');
-    }
-
-    /**
-     * Whether we can download many images quickly (so every page image can be
-     * pre-generated). True for Gemini (billing) or when a Pollinations token
-     * lifts the free-tier rate limit. On the anonymous free tier this is false,
-     * so callers should pre-generate only the cover and link the rest by URL.
-     */
-    public function canBatchImages(): bool
-    {
-        return $this->imageProvider === 'gemini' || $this->pollinationsToken !== '';
-    }
-
-    /**
-     * True when the image provider is the reliable paid Gemini one — so callers
-     * can skip the retries and pacing that the free image tier needs (which
-     * would otherwise waste paid API calls / tokens).
-     */
-    public function usesGeminiImages(): bool
-    {
-        return $this->imageProvider === 'gemini';
     }
 
     public function isConfigured(): bool
@@ -61,22 +36,14 @@ class GeminiService
     }
 
     /**
-     * Download an illustration to local storage and return a public path like
-     * "storage/uploads/covers/<uuid>.jpg", or null if it could not be made.
-     *
-     * Downloading (rather than storing a URL) means the app loads images from
-     * our own server — so several page images can display at once without
-     * hitting the image provider's per-request rate limit. The caller should
-     * pace these and keep a time budget (see ContentManagementController).
+     * Generate an illustration via Gemini and persist it to local storage.
+     * Returns a public path like "storage/uploads/covers/<uuid>.jpg", or null
+     * if generation failed (see imageError() for the human-readable reason).
      */
-    public function downloadImage(string $prompt, int $seed = 0): ?string
+    public function downloadImage(string $prompt): ?string
     {
         $this->lastImageError = null;
-
-        if ($this->imageProvider === 'gemini') {
-            return $this->generateWithGemini($this->styledPrompt($prompt));
-        }
-        return $this->downloadFromPollinations($this->imageUrl($prompt, $seed));
+        return $this->generateWithGemini($this->styledPrompt($prompt));
     }
 
     /**
@@ -159,61 +126,130 @@ class GeminiService
     }
 
     /**
-     * Build a stable Pollinations image URL (no network call). Used as a
-     * fallback reference when a synchronous download isn't possible.
+     * Ask Gemini to suggest sensory-friendly adjustments to a child's settings,
+     * based on aggregated listening behaviour stats. Returns a list of items
+     * shaped like:
+     *
+     *   [
+     *     'setting_key'     => 'reading_speed',
+     *     'suggested_value' => 0.9,
+     *     'reason'          => 'High pause and skip rates suggest the
+     *                           narration may be too fast for comfortable
+     *                           processing.',
+     *   ]
+     *
+     * Returns an empty list on Gemini error or quota — the caller (UC-9) is
+     * responsible for falling back to the cached row.
+     *
+     * @param array<string,mixed> $stats Aggregated stats: avg_session_minutes,
+     *  completion_rate, pause_rate, skip_rate, early_drop_rate, mood_breakdown,
+     *  sessions_count, current_settings.
+     * @return list<array{setting_key:string, suggested_value:mixed, reason:string}>
      */
-    public function imageUrl(string $prompt, int $seed = 0): string
+    public function analyseListening(array $stats): array
     {
-        // Keep the URL bounded and add a short, consistent illustration style.
-        $scene = trim($prompt);
-        if (mb_strlen($scene) > 240) {
-            $scene = mb_substr($scene, 0, 240);
-        }
-        $styled = $scene . ', soft pastel storybook illustration for children, gentle, calm, no text';
+        $payload = json_encode($stats, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $prompt = <<<PROMPT
+You are advising a caregiver on how to better tune an audiobook reader app for
+their autistic child. Below are anonymised, aggregated stats from the child's
+recent listening sessions. Suggest sensory-friendly adjustments to the child's
+in-app settings.
 
-        // NB: we deliberately don't request 'flux' — it's now a paid model that
-        // returns HTTP 402 / is heavily throttled. The default model is free.
-        $query = http_build_query([
-            'width'  => 768,
-            'height' => 512,
-            'nologo' => 'true',
-            'seed'   => $seed > 0 ? $seed : random_int(1, 999999),
-        ]);
+STATS (JSON):
+{$payload}
 
-        return 'https://image.pollinations.ai/prompt/' . rawurlencode($styled) . '?' . $query;
-    }
+Rules:
+- Only suggest changes to known settings. Allowed setting_key values are
+  exactly: "reading_speed", "narrator_voice", "volume", "text_scale",
+  "reduced_animations", "auto_play_next", "read_along".
+- For reading_speed: a number between 0.5 and 1.5 (step 0.05).
+- For narrator_voice: one of "calm_female", "gentle_female", "warm_male",
+  "friendly_child", "soothing_elder".
+- For volume: a number between 0.0 and 1.0 (step 0.05).
+- For text_scale: a number between 0.8 and 1.6 (step 0.05).
+- For reduced_animations, auto_play_next, read_along: true or false.
+- Each item's "reason" must be one short, plain sentence a caregiver can read
+  in a glance. No clinical claims, no jargon. Reference the specific stat you
+  used (e.g. "Pause rate is high (3.4 per session)…").
+- Do NOT suggest changes that match the current value already.
+- At most 3 suggestions. Skip suggestions you are not confident about.
 
-    /** Fetch a Pollinations image URL and store the bytes locally. */
-    private function downloadFromPollinations(string $url): ?string
-    {
+Return ONLY JSON with key "items".
+PROMPT;
+
         try {
-            // Short timeout: if the free tier is queueing us, fail fast and let
-            // the caller fall back to a URL reference instead of hanging.
-            $request = Http::timeout(25);
-            if ($this->pollinationsToken !== '') {
-                $request = $request->withToken($this->pollinationsToken);
-            }
-            $response = $request->get($url);
+            $response = Http::timeout(45)->post(
+                "{$this->base}/{$this->textModel}:generateContent?key={$this->key}",
+                [
+                    'contents' => [
+                        ['parts' => [['text' => $prompt]]],
+                    ],
+                    'generationConfig' => [
+                        'temperature'      => 0.4,
+                        'responseMimeType' => 'application/json',
+                        'responseSchema'   => [
+                            'type'       => 'OBJECT',
+                            'properties' => [
+                                'items' => [
+                                    'type'  => 'ARRAY',
+                                    'items' => [
+                                        'type'       => 'OBJECT',
+                                        'properties' => [
+                                            'setting_key'     => ['type' => 'STRING'],
+                                            // suggested_value is a string here so Gemini can
+                                            // emit numbers, booleans, or enum strings without
+                                            // the schema rejecting the response. We coerce on
+                                            // the way out.
+                                            'suggested_value' => ['type' => 'STRING'],
+                                            'reason'          => ['type' => 'STRING'],
+                                        ],
+                                        'required' => ['setting_key', 'suggested_value', 'reason'],
+                                    ],
+                                ],
+                            ],
+                            'required' => ['items'],
+                        ],
+                    ],
+                ]
+            );
 
             if (!$response->successful()) {
-                Log::warning('Pollinations image error', ['status' => $response->status()]);
-                $this->lastImageError = 'The free image service was busy.';
-                return null;
+                Log::warning('Gemini analyse error', [
+                    'status' => $response->status(),
+                    'body'   => mb_substr($response->body(), 0, 300),
+                ]);
+                return [];
             }
 
-            $binary = $response->body();
-            if (strlen($binary) < 1000 || !str_contains((string) $response->header('Content-Type'), 'image')) {
-                $this->lastImageError = 'The free image service did not return a picture.';
-                return null;
+            $text = data_get($response->json(), 'candidates.0.content.parts.0.text');
+            if (!$text) {
+                return [];
             }
+            $parsed = json_decode($text, true);
+            $items = is_array($parsed) ? ($parsed['items'] ?? []) : [];
 
-            $path = 'uploads/covers/' . Str::uuid() . '.jpg';
-            Storage::disk('public')->put($path, $binary);
-            return 'storage/' . $path;
+            // Normalise into the simple shape callers expect.
+            $clean = [];
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $key = (string) ($item['setting_key'] ?? '');
+                $raw = $item['suggested_value'] ?? null;
+                $reason = trim((string) ($item['reason'] ?? ''));
+                if ($key === '' || $raw === null || $reason === '') {
+                    continue;
+                }
+                $clean[] = [
+                    'setting_key'     => $key,
+                    'suggested_value' => $raw,
+                    'reason'          => $reason,
+                ];
+            }
+            return $clean;
         } catch (\Throwable $e) {
-            Log::warning('Pollinations image exception', ['error' => $e->getMessage()]);
-            $this->lastImageError = 'Image download timed out.';
-            return null;
+            Log::warning('Gemini analyse exception', ['error' => $e->getMessage()]);
+            return [];
         }
     }
 

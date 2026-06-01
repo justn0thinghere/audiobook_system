@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../i18n/i18n.dart';
+import '../../models/ai_suggestion.dart';
 import '../../models/insights_overview.dart';
 import '../../services/api_service.dart';
 import '../../services/database_service.dart';
 import '../../state/profiles_state.dart';
+import '../../state/settings_state.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_snackbar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/soft_card.dart';
 import '../../widgets/stat_card.dart';
@@ -25,6 +28,13 @@ class _InsightsPageState extends State<InsightsPage> {
   // null = all children (the default); otherwise the child whose stats we're
   // scoped to. Stays across rebuilds so chip selection persists.
   String? _selectedChildId;
+
+  // UC-9: AI listening-behaviour suggestions for the currently-selected child.
+  // Suggestions are inherently per-child (the analysis prompt is scoped that
+  // way), so this only loads when _selectedChildId is non-null.
+  AiSuggestion? _suggestions;
+  bool _suggestionsLoading = false;
+  bool _analyzing = false;
 
   static const _moodEmoji = {
     'happy': '😊',
@@ -64,8 +74,84 @@ class _InsightsPageState extends State<InsightsPage> {
 
   void _selectChild(String? childId) {
     if (_selectedChildId == childId) return;
-    setState(() => _selectedChildId = childId);
+    setState(() {
+      _selectedChildId = childId;
+      // Drop the previous child's suggestions while we fetch the new one's.
+      _suggestions = null;
+    });
     _load();
+    if (childId != null) {
+      _loadSuggestions(childId);
+    }
+  }
+
+  Future<void> _loadSuggestions(String childId) async {
+    setState(() => _suggestionsLoading = true);
+    final resp = await DatabaseService.getSuggestions(childId);
+    if (!mounted || _selectedChildId != childId) return;
+    setState(() {
+      _suggestions = resp.success && resp.data is AiSuggestion
+          ? resp.data as AiSuggestion
+          : null;
+      _suggestionsLoading = false;
+    });
+  }
+
+  Future<void> _runAnalysis(String childId) async {
+    setState(() => _analyzing = true);
+    final resp = await DatabaseService.analyseListening(childId);
+    if (!mounted || _selectedChildId != childId) return;
+    setState(() {
+      if (resp.success && resp.data is AiSuggestion) {
+        _suggestions = resp.data as AiSuggestion;
+      }
+      _analyzing = false;
+    });
+    if (!resp.success && mounted) {
+      AppSnackbar.error(resp.message, context: context);
+    } else if (mounted &&
+        _suggestions != null &&
+        _suggestions!.isStale) {
+      AppSnackbar.warning(
+        context.tr('insights.suggestions_stale'),
+        context: context,
+      );
+    }
+  }
+
+  Future<void> _acceptItem(
+    String childId,
+    AiSuggestionItem item, {
+    dynamic overrideValue,
+  }) async {
+    final resp = await DatabaseService.applySuggestion(
+      childId: childId,
+      itemId: item.id,
+      overrideValue: overrideValue,
+    );
+    if (!mounted) return;
+    if (resp.success && resp.data is AiSuggestion) {
+      setState(() => _suggestions = resp.data as AiSuggestion);
+      // The applied value also lives in child_settings now — re-load so the
+      // global cache picks it up before the player opens.
+      // ignore: use_build_context_synchronously
+      await context.read<SettingsState>().loadForChild(childId);
+    } else {
+      AppSnackbar.error(resp.message, context: context);
+    }
+  }
+
+  Future<void> _dismissItem(String childId, AiSuggestionItem item) async {
+    final resp = await DatabaseService.dismissSuggestion(
+      childId: childId,
+      itemId: item.id,
+    );
+    if (!mounted) return;
+    if (resp.success && resp.data is AiSuggestion) {
+      setState(() => _suggestions = resp.data as AiSuggestion);
+    } else {
+      AppSnackbar.error(resp.message, context: context);
+    }
   }
 
   String _formatMinutes(int minutes) {
@@ -110,6 +196,20 @@ class _InsightsPageState extends State<InsightsPage> {
             allLabel: context.tr('insights.viewing_all'),
           ),
           const SizedBox(height: 16),
+          if (_selectedChildId != null) ...[
+            _SuggestionsCard(
+              suggestion: _suggestions,
+              loading: _suggestionsLoading,
+              analyzing: _analyzing,
+              onRunAnalysis: () => _runAnalysis(_selectedChildId!),
+              onAccept: (item) =>
+                  _acceptItem(_selectedChildId!, item),
+              onEditAccept: (item, value) =>
+                  _acceptItem(_selectedChildId!, item, overrideValue: value),
+              onDismiss: (item) => _dismissItem(_selectedChildId!, item),
+            ),
+            const SizedBox(height: 16),
+          ],
           if (_loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 60),
@@ -1008,6 +1108,533 @@ class _Badge extends StatelessWidget {
           BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
       child: Text(label,
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+    );
+  }
+}
+
+// ============================================================
+// UC-9: AI listening-behaviour suggestions
+// ============================================================
+
+/// Renders Gemini's per-child suggestion list with per-item Accept / Edit &
+/// accept / Dismiss actions. Always visible when a child is selected, so the
+/// caregiver has a clear call-to-action ("Run AI analysis") even before the
+/// first analysis has been requested.
+class _SuggestionsCard extends StatelessWidget {
+  final AiSuggestion? suggestion;
+  final bool loading;
+  final bool analyzing;
+  final VoidCallback onRunAnalysis;
+  final void Function(AiSuggestionItem item) onAccept;
+  final void Function(AiSuggestionItem item, dynamic value) onEditAccept;
+  final void Function(AiSuggestionItem item) onDismiss;
+
+  const _SuggestionsCard({
+    required this.suggestion,
+    required this.loading,
+    required this.analyzing,
+    required this.onRunAnalysis,
+    required this.onAccept,
+    required this.onEditAccept,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: AppColors.iconCirclePurple,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.auto_awesome_rounded,
+                    size: 20, color: AppColors.textPrimary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(context.tr('insights.suggestions_title'),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 16)),
+                    const SizedBox(height: 2),
+                    Text(
+                      context.tr('insights.suggestions_sub'),
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 22),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            _buildBody(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    final s = suggestion;
+    final hasItems = s != null && s.items.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (s != null && s.isStale)
+          _InfoBanner(
+            color: AppColors.softPeach,
+            icon: Icons.cloud_off_rounded,
+            iconColor: AppColors.warning,
+            text: context.tr('insights.suggestions_stale'),
+          ),
+        if (s != null && s.isLowConfidence) ...[
+          if (s.isStale) const SizedBox(height: 8),
+          _InfoBanner(
+            color: AppColors.softLavender,
+            icon: Icons.info_outline_rounded,
+            iconColor: AppColors.textPrimary,
+            text: context.tr('insights.suggestions_low_confidence'),
+          ),
+        ],
+        if (hasItems) ...[
+          if (s.isStale || s.isLowConfidence) const SizedBox(height: 12),
+          for (var i = 0; i < s.items.length; i++) ...[
+            _SuggestionTile(
+              item: s.items[i],
+              onAccept: () => onAccept(s.items[i]),
+              onEditAccept: (v) => onEditAccept(s.items[i], v),
+              onDismiss: () => onDismiss(s.items[i]),
+            ),
+            if (i != s.items.length - 1)
+              const Divider(height: 18, color: AppColors.cardBorder),
+          ],
+        ] else ...[
+          if (s != null && (s.isStale || s.isLowConfidence))
+            const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.tr('insights.no_suggestions_title'),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  context.tr('insights.no_suggestions_body'),
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            if (s != null && s.generatedAt != null) ...[
+              Icon(Icons.history_rounded,
+                  size: 14, color: AppColors.textSecondary),
+              const SizedBox(width: 4),
+              Text(
+                '${context.tr('insights.suggestions_generated_at')}: '
+                '${_shortWhen(s.generatedAt!)}',
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 11),
+              ),
+            ],
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: analyzing ? null : onRunAnalysis,
+              icon: analyzing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(analyzing
+                  ? context.tr('insights.analyzing')
+                  : (hasItems
+                      ? context.tr('insights.refresh_analysis')
+                      : context.tr('insights.run_analysis'))),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static String _shortWhen(DateTime when) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[when.month - 1]} ${when.day}, '
+        '${when.hour.toString().padLeft(2, '0')}:'
+        '${when.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _InfoBanner extends StatelessWidget {
+  final Color color;
+  final Color iconColor;
+  final IconData icon;
+  final String text;
+  const _InfoBanner({
+    required this.color,
+    required this.iconColor,
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: iconColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuggestionTile extends StatelessWidget {
+  final AiSuggestionItem item;
+  final VoidCallback onAccept;
+  final void Function(dynamic value) onEditAccept;
+  final VoidCallback onDismiss;
+
+  const _SuggestionTile({
+    required this.item,
+    required this.onAccept,
+    required this.onEditAccept,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final settingLabel = _settingLabel(context, item.settingKey);
+    final suggested = _renderValue(context, item.settingKey, item.suggestedValue);
+    final current = item.currentValue == null
+        ? null
+        : _renderValue(context, item.settingKey, item.currentValue);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      settingLabel,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (current != null)
+                          _ValuePill(
+                            label: context.tr('insights.current_value'),
+                            value: current,
+                            color: AppColors.background,
+                          ),
+                        _ValuePill(
+                          label: context.tr('insights.suggested_value'),
+                          value: suggested,
+                          color: AppColors.iconCircleGreen,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (!item.isPending)
+                _Badge(
+                  label: item.isAccepted
+                      ? context.tr('insights.applied_badge')
+                      : context.tr('insights.dismissed_badge'),
+                  color: item.isAccepted
+                      ? AppColors.iconCircleGreen
+                      : AppColors.softLavender,
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            item.reason,
+            style: const TextStyle(
+                color: AppColors.textSecondary, fontSize: 12),
+          ),
+          if (item.isPending) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                FilledButton.icon(
+                  onPressed: onAccept,
+                  icon: const Icon(Icons.check_rounded, size: 16),
+                  label: Text(context.tr('insights.accept')),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final newValue = await _openEditor(context);
+                    if (newValue != null) onEditAccept(newValue);
+                  },
+                  icon: const Icon(Icons.edit_rounded, size: 16),
+                  label: Text(context.tr('insights.edit_accept')),
+                ),
+                TextButton.icon(
+                  onPressed: onDismiss,
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  label: Text(context.tr('insights.dismiss')),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<dynamic> _openEditor(BuildContext context) {
+    return showDialog<dynamic>(
+      context: context,
+      builder: (ctx) => _EditValueDialog(item: item),
+    );
+  }
+
+  String _settingLabel(BuildContext context, String key) {
+    return context.tr('insights.setting.$key');
+  }
+
+  static String _renderValue(BuildContext context, String key, dynamic v) {
+    switch (key) {
+      case 'narrator_voice':
+        return context.tr('voice.${v.toString()}');
+      case 'reduced_animations':
+      case 'auto_play_next':
+      case 'read_along':
+        final on = v == true || v == 'true' || v == 1;
+        return on
+            ? context.tr('insights.bool_on')
+            : context.tr('insights.bool_off');
+      case 'reading_speed':
+      case 'text_scale':
+        final d = v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0;
+        return '${d.toStringAsFixed(2)}×';
+      case 'volume':
+        final d = v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0;
+        return '${(d * 100).round()}%';
+    }
+    return v.toString();
+  }
+}
+
+class _ValuePill extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _ValuePill({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration:
+          BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(
+            fontSize: 11,
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Edit dialog opened from a suggestion's "Edit & accept" button. The control
+/// type matches the setting's underlying type: slider for numerics, dropdown
+/// for the voice enum, switch for booleans.
+class _EditValueDialog extends StatefulWidget {
+  final AiSuggestionItem item;
+  const _EditValueDialog({required this.item});
+
+  @override
+  State<_EditValueDialog> createState() => _EditValueDialogState();
+}
+
+class _EditValueDialogState extends State<_EditValueDialog> {
+  late dynamic _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.item.suggestedValue;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(context.tr('insights.edit_value_title')),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: _buildEditor(context),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: Text(context.tr('insights.cancel')),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_value),
+          child: Text(context.tr('insights.save')),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEditor(BuildContext context) {
+    switch (widget.item.settingKey) {
+      case 'reading_speed':
+        return _slider(0.5, 1.5, 0.05);
+      case 'volume':
+        return _slider(0.0, 1.0, 0.05);
+      case 'text_scale':
+        return _slider(0.8, 1.6, 0.05);
+      case 'narrator_voice':
+        const voices = [
+          'calm_female',
+          'gentle_female',
+          'warm_male',
+          'friendly_child',
+          'soothing_elder',
+        ];
+        final current = voices.contains(_value as String?)
+            ? _value as String
+            : voices.first;
+        return DropdownButtonFormField<String>(
+          initialValue: current,
+          items: [
+            for (final v in voices)
+              DropdownMenuItem(value: v, child: Text(context.tr('voice.$v'))),
+          ],
+          onChanged: (v) => setState(() => _value = v),
+        );
+      case 'reduced_animations':
+      case 'auto_play_next':
+      case 'read_along':
+        final on =
+            _value == true || _value == 'true' || _value == 1;
+        return SwitchListTile(
+          value: on,
+          onChanged: (v) => setState(() => _value = v),
+          title: Text(on
+              ? context.tr('insights.bool_on')
+              : context.tr('insights.bool_off')),
+        );
+    }
+    return Text(_value.toString());
+  }
+
+  Widget _slider(double min, double max, double step) {
+    final asNum = _value is num
+        ? (_value as num).toDouble()
+        : double.tryParse(_value.toString()) ?? min;
+    final clamped = asNum.clamp(min, max).toDouble();
+    final divisions = ((max - min) / step).round();
+    final label = widget.item.settingKey == 'volume'
+        ? '${(clamped * 100).round()}%'
+        : '${clamped.toStringAsFixed(2)}×';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label,
+            style:
+                const TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
+        Slider(
+          value: clamped,
+          min: min,
+          max: max,
+          divisions: divisions,
+          label: label,
+          onChanged: (v) => setState(() {
+            // Snap to the step so the saved value is one of the values the
+            // backend's validator expects.
+            _value = (v / step).round() * step;
+          }),
+        ),
+      ],
     );
   }
 }

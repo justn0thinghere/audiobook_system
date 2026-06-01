@@ -2,14 +2,84 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\AiSuggestion;
+use App\Models\ChildProfile;
+use App\Models\ChildSettings;
 use App\Models\ListeningHistory;
+use App\Services\GeminiService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class InsightsController extends ApiController
 {
     private const TZ = 'Asia/Kuala_Lumpur';
+
+    /**
+     * Minimum number of recorded listening sessions before Gemini's suggestion
+     * is considered reliable (UC-9 exception flow E1). Below this we still
+     * surface the suggestion list, but tagged with confidence = "low".
+     */
+    private const MIN_SESSIONS_FOR_CONFIDENCE = 5;
+
+    /**
+     * Allowed setting keys + their value validators. Anything else returned by
+     * Gemini is dropped on the floor (UC-9 exception flow E3 — "suggestion
+     * that does not fit any known setting").
+     *
+     * Each validator coerces the raw value to its concrete type, returning
+     * either [true, $coerced] or [false, null] when the value is out of range.
+     *
+     * @return array<string, callable(mixed):array{0:bool,1:mixed}>
+     */
+    private function settingValidators(): array
+    {
+        return [
+            'reading_speed' => function ($v): array {
+                if (!is_numeric($v)) {
+                    return [false, null];
+                }
+                $f = round((float) $v, 2);
+                return $f >= 0.5 && $f <= 1.5 ? [true, $f] : [false, null];
+            },
+            'volume' => function ($v): array {
+                if (!is_numeric($v)) {
+                    return [false, null];
+                }
+                $f = round((float) $v, 2);
+                return $f >= 0.0 && $f <= 1.0 ? [true, $f] : [false, null];
+            },
+            'text_scale' => function ($v): array {
+                if (!is_numeric($v)) {
+                    return [false, null];
+                }
+                $f = round((float) $v, 2);
+                return $f >= 0.8 && $f <= 1.6 ? [true, $f] : [false, null];
+            },
+            'narrator_voice' => function ($v): array {
+                $s = is_string($v) ? trim($v) : '';
+                return in_array($s, ChildSettings::ALLOWED_VOICES, true)
+                    ? [true, $s]
+                    : [false, null];
+            },
+            'reduced_animations' => fn ($v) => [true, $this->coerceBool($v)],
+            'auto_play_next'     => fn ($v) => [true, $this->coerceBool($v)],
+            'read_along'         => fn ($v) => [true, $this->coerceBool($v)],
+        ];
+    }
+
+    private function coerceBool(mixed $v): bool
+    {
+        if (is_bool($v)) {
+            return $v;
+        }
+        if (is_string($v)) {
+            return in_array(strtolower(trim($v)), ['true', '1', 'yes', 'on'], true);
+        }
+        return (bool) $v;
+    }
 
     /**
      * Aggregated listening insights for the signed-in caregiver:
@@ -114,6 +184,352 @@ class InsightsController extends ApiController
             'recent_sessions'         => $this->recentSessions($childIds),
             'children'                => $children,
         ]);
+    }
+
+    /**
+     * UC-9 — Analyse a child's listening behaviour. Aggregates stats, asks
+     * Gemini for sensory-friendly suggestions, UPSERTs the cached row, and
+     * returns the suggestion list. On Gemini error (E2) we re-serve the
+     * previous cached row with is_stale = true; on too-few-sessions (E1) we
+     * still return the suggestions but flag confidence as "low".
+     */
+    public function analyse(Request $request, string $childId): JsonResponse
+    {
+        $profile = $this->ownedProfile($request, $childId);
+        if (!$profile) {
+            return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
+        }
+
+        $stats = $this->aggregateStatsFor($profile);
+        $confidence = $stats['sessions_count'] < self::MIN_SESSIONS_FOR_CONFIDENCE
+            ? 'low'
+            : 'normal';
+
+        // Tell Gemini what the current settings are so it doesn't suggest a
+        // no-op change.
+        $settings = $profile->childSettings
+            ?? ChildSettings::create(['child_id' => $profile->child_id]);
+        $stats['current_settings'] = [
+            'narrator_voice'     => $settings->narrator_voice,
+            'reading_speed'      => (float) $settings->reading_speed,
+            'volume'             => (float) $settings->volume,
+            'text_scale'         => (float) $settings->text_scale,
+            'reduced_animations' => (bool) $settings->reduced_animations,
+            'auto_play_next'     => (bool) $settings->auto_play_next,
+            'read_along'         => (bool) $settings->read_along,
+        ];
+
+        $gemini = app(GeminiService::class);
+        $rawItems = $gemini->isConfigured()
+            ? $gemini->analyseListening($stats)
+            : [];
+
+        if (empty($rawItems)) {
+            // E2: Gemini unreachable / quota / nothing to suggest. Re-serve the
+            // last cached row marked stale so the caregiver still sees something
+            // with a clear "couldn't refresh" note.
+            $cached = AiSuggestion::where('child_id', $profile->child_id)->first();
+            if ($cached) {
+                $cached->is_stale = true;
+                $cached->save();
+                return $this->successResponse('Suggestions ready (cached)',
+                    $this->serializeSuggestion($cached));
+            }
+            // No cached row either — return an empty result so the UI can show
+            // an "AI suggestions unavailable" state.
+            return $this->successResponse('No suggestions available', [
+                'suggestion_id' => null,
+                'child_id'      => $profile->child_id,
+                'confidence'    => $confidence,
+                'is_stale'      => false,
+                'generated_at'  => null,
+                'source_stats'  => $stats,
+                'items'         => [],
+            ]);
+        }
+
+        // Filter out items we don't recognise (E3) and items that match the
+        // current value (would be a no-op).
+        $validators = $this->settingValidators();
+        $items = [];
+        foreach ($rawItems as $raw) {
+            $key = $raw['setting_key'];
+            if (!isset($validators[$key])) {
+                continue;
+            }
+            [$ok, $value] = $validators[$key]($raw['suggested_value']);
+            if (!$ok) {
+                continue;
+            }
+            $current = $stats['current_settings'][$key] ?? null;
+            if ($this->valuesEqual($current, $value)) {
+                continue;
+            }
+            $items[] = [
+                'id'              => (string) Str::uuid(),
+                'setting_key'     => $key,
+                'current_value'   => $current,
+                'suggested_value' => $value,
+                'reason'          => $raw['reason'],
+                'status'          => 'pending',
+            ];
+        }
+
+        $row = AiSuggestion::updateOrCreate(
+            ['child_id' => $profile->child_id],
+            [
+                'source_stats' => $stats,
+                'items'        => $items,
+                'confidence'   => $confidence,
+                'is_stale'     => false,
+                'generated_at' => now(),
+            ]
+        );
+
+        return $this->successResponse('Suggestions ready',
+            $this->serializeSuggestion($row));
+    }
+
+    /**
+     * Latest cached suggestion row for a child (no Gemini call). Used by the
+     * insights page when it first opens, so the caregiver sees yesterday's
+     * suggestions instantly instead of waiting for a fresh analyse round.
+     */
+    public function suggestions(Request $request, string $childId): JsonResponse
+    {
+        $profile = $this->ownedProfile($request, $childId);
+        if (!$profile) {
+            return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
+        }
+        $cached = AiSuggestion::where('child_id', $profile->child_id)->first();
+        if (!$cached) {
+            return $this->successResponse('No suggestions yet', [
+                'suggestion_id' => null,
+                'child_id'      => $profile->child_id,
+                'confidence'    => 'normal',
+                'is_stale'      => false,
+                'generated_at'  => null,
+                'source_stats'  => null,
+                'items'         => [],
+            ]);
+        }
+        return $this->successResponse('OK', $this->serializeSuggestion($cached));
+    }
+
+    /**
+     * Accept a single suggestion — optionally with an edited value (UC-9 A2) —
+     * and write the change to the child's settings row. Marks the suggestion
+     * as accepted in the cached items list so the UI can show it greyed out.
+     */
+    public function applySuggestion(Request $request, string $childId): JsonResponse
+    {
+        $profile = $this->ownedProfile($request, $childId);
+        if (!$profile) {
+            return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'item_id'        => 'required|string',
+            'override_value' => 'sometimes|nullable',
+        ]);
+        if ($validator->fails()) {
+            return $this->errorResponse(
+                'Validation failed: ' . implode(', ', $validator->errors()->all()),
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
+        $row = AiSuggestion::where('child_id', $profile->child_id)->first();
+        if (!$row) {
+            return $this->errorResponse('No suggestions to apply', 'NOT_FOUND', 404);
+        }
+
+        $items = $row->items;
+        $idx = $this->findItemIndex($items, $request->input('item_id'));
+        if ($idx === null) {
+            return $this->errorResponse('Suggestion item not found', 'NOT_FOUND', 404);
+        }
+        $item = $items[$idx];
+        if (($item['status'] ?? 'pending') !== 'pending') {
+            return $this->errorResponse('This suggestion has already been resolved',
+                'ALREADY_RESOLVED', 409);
+        }
+
+        // Coerce + validate either the override value or the original suggestion.
+        $validators = $this->settingValidators();
+        $key = (string) $item['setting_key'];
+        if (!isset($validators[$key])) {
+            return $this->errorResponse('Unknown setting in suggestion', 'INVALID', 422);
+        }
+        $rawValue = $request->has('override_value')
+            ? $request->input('override_value')
+            : ($item['suggested_value'] ?? null);
+        [$ok, $value] = $validators[$key]($rawValue);
+        if (!$ok) {
+            return $this->errorResponse('Suggested value is out of range', 'INVALID', 422);
+        }
+
+        // Persist to child_settings.
+        $settings = $profile->childSettings
+            ?? ChildSettings::create(['child_id' => $profile->child_id]);
+        $settings->fill([$key => $value])->save();
+
+        $items[$idx]['status'] = $request->has('override_value') ? 'edited' : 'accepted';
+        $items[$idx]['applied_value'] = $value;
+        $row->items = $items;
+        $row->save();
+
+        return $this->successResponse('Suggestion applied',
+            $this->serializeSuggestion($row));
+    }
+
+    /** Mark a single suggestion as dismissed without changing settings. */
+    public function dismissSuggestion(Request $request, string $childId): JsonResponse
+    {
+        $profile = $this->ownedProfile($request, $childId);
+        if (!$profile) {
+            return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'item_id' => 'required|string',
+        ]);
+        if ($validator->fails()) {
+            return $this->errorResponse(
+                'Validation failed: ' . implode(', ', $validator->errors()->all()),
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
+        $row = AiSuggestion::where('child_id', $profile->child_id)->first();
+        if (!$row) {
+            return $this->errorResponse('No suggestions to dismiss', 'NOT_FOUND', 404);
+        }
+
+        $items = $row->items;
+        $idx = $this->findItemIndex($items, $request->input('item_id'));
+        if ($idx === null) {
+            return $this->errorResponse('Suggestion item not found', 'NOT_FOUND', 404);
+        }
+        $items[$idx]['status'] = 'dismissed';
+        $row->items = $items;
+        $row->save();
+
+        return $this->successResponse('Suggestion dismissed',
+            $this->serializeSuggestion($row));
+    }
+
+    private function findItemIndex(array $items, string $itemId): ?int
+    {
+        foreach ($items as $i => $item) {
+            if (($item['id'] ?? null) === $itemId) {
+                return $i;
+            }
+        }
+        return null;
+    }
+
+    private function valuesEqual(mixed $a, mixed $b): bool
+    {
+        if (is_bool($a) || is_bool($b)) {
+            return (bool) $a === (bool) $b;
+        }
+        if (is_numeric($a) && is_numeric($b)) {
+            return abs((float) $a - (float) $b) < 0.005;
+        }
+        return (string) $a === (string) $b;
+    }
+
+    private function ownedProfile(Request $request, string $childId): ?ChildProfile
+    {
+        $caregiver = $request->get('auth_caregiver');
+        return $caregiver
+            ? $caregiver->childProfiles()->where('child_id', $childId)->first()
+            : null;
+    }
+
+    /**
+     * Compute the per-child stats fed to Gemini for UC-9. All ratios are
+     * normalised per-session so the prompt is the same shape regardless of
+     * how many sessions the child has logged.
+     *
+     * @return array<string,mixed>
+     */
+    private function aggregateStatsFor(ChildProfile $profile): array
+    {
+        // Last 30 days, so the analysis reflects current behaviour rather than
+        // ancient sessions from when the child first started using the app.
+        $since = Carbon::now(self::TZ)->subDays(30);
+        $sessions = $profile->listeningHistory()
+            ->where('created_at', '>=', $since)
+            ->get();
+
+        $count = $sessions->count();
+        if ($count === 0) {
+            return [
+                'window_days'         => 30,
+                'sessions_count'      => 0,
+                'avg_session_minutes' => 0.0,
+                'completion_rate'     => 0.0,
+                'early_drop_rate'     => 0.0,
+                'pause_rate'          => 0.0,
+                'skip_rate'           => 0.0,
+                'mood_breakdown'      => ['happy' => 0, 'calm' => 0, 'curious' => 0, 'sleepy' => 0],
+            ];
+        }
+
+        $totalSeconds = (int) $sessions->sum('duration_seconds');
+        $completed = $sessions->where('completed', true)->count();
+        $totalPauses = (int) $sessions->sum('pause_count');
+        $totalSkips  = (int) $sessions->sum('skip_count');
+
+        // Early drop = sessions where the child stopped before halfway AND
+        // didn't mark the book complete. A high rate suggests the child loses
+        // interest or finds the content overwhelming.
+        $earlyDrops = $sessions->filter(function ($s) {
+            if ($s->completed) {
+                return false;
+            }
+            $duration = (int) $s->duration_seconds;
+            $position = (int) $s->last_position_seconds;
+            if ($duration <= 0) {
+                return false;
+            }
+            return ($position / $duration) < 0.5;
+        })->count();
+
+        $moods = ['happy' => 0, 'calm' => 0, 'curious' => 0, 'sleepy' => 0];
+        foreach ($sessions as $s) {
+            if (isset($moods[$s->mood])) {
+                $moods[$s->mood]++;
+            }
+        }
+
+        return [
+            'window_days'         => 30,
+            'sessions_count'      => $count,
+            'avg_session_minutes' => round($totalSeconds / $count / 60, 1),
+            'completion_rate'     => round($completed / $count, 3),
+            'early_drop_rate'     => round($earlyDrops / $count, 3),
+            'pause_rate'          => round($totalPauses / $count, 2),
+            'skip_rate'           => round($totalSkips / $count, 2),
+            'mood_breakdown'      => $moods,
+        ];
+    }
+
+    private function serializeSuggestion(AiSuggestion $row): array
+    {
+        return [
+            'suggestion_id' => $row->suggestion_id,
+            'child_id'      => $row->child_id,
+            'confidence'    => $row->confidence,
+            'is_stale'      => (bool) $row->is_stale,
+            'generated_at'  => $row->generated_at?->format('Y-m-d H:i:s'),
+            'source_stats'  => $row->source_stats,
+            'items'         => $row->items,
+        ];
     }
 
     /** Build [date=>['date','day','minutes'=>0], …] for the last 7 days (oldest first). */
@@ -254,15 +670,12 @@ class InsightsController extends ApiController
     }
 
     /**
-     * Locally-stored media (e.g. "storage/uploads/...") is made absolute;
-     * values that already look like full URLs (Pollinations/Gemini images)
-     * pass through unchanged.
-     */
-    /**
      * Build an absolute URL for a stored relative path using the incoming
      * request's host (not APP_URL), so the URL is always reachable by the
      * client that asked — emulator, real device, anything. See the longer
      * comment on AudiobookController::mediaUrl for the rationale.
+     *
+     * Already-absolute URLs (Gemini image links) pass through unchanged.
      */
     private function mediaUrl(?string $path): ?string
     {

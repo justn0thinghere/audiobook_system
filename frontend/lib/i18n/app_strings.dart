@@ -332,6 +332,43 @@ class AppStrings {
     'insights.mood.calm': 'Calm',
     'insights.mood.curious': 'Curious',
     'insights.mood.sleepy': 'Sleepy',
+
+    // UC-9: AI listening-behaviour suggestions card
+    'insights.suggestions_title': 'AI suggestions',
+    'insights.suggestions_sub':
+        'Tweaks Gemini thinks may help this child, based on recent listening behaviour.',
+    'insights.suggestions_pick_child':
+        'Select one child above to see personalised suggestions.',
+    'insights.run_analysis': 'Run AI analysis',
+    'insights.refresh_analysis': 'Refresh analysis',
+    'insights.analyzing': 'Asking Gemini…',
+    'insights.no_suggestions_title': 'No suggestions yet',
+    'insights.no_suggestions_body':
+        'Tap "Run AI analysis" to ask Gemini for personalised suggestions.',
+    'insights.suggestions_low_confidence':
+        'Low confidence — based on very few sessions. Keep using the app for a while before relying on these.',
+    'insights.suggestions_stale':
+        'Could not refresh — showing previous suggestions.',
+    'insights.suggestions_generated_at': 'Generated',
+    'insights.accept': 'Accept',
+    'insights.edit_accept': 'Edit & accept',
+    'insights.dismiss': 'Dismiss',
+    'insights.applied_badge': 'Applied',
+    'insights.dismissed_badge': 'Dismissed',
+    'insights.current_value': 'Now',
+    'insights.suggested_value': 'Suggested',
+    'insights.edit_value_title': 'Adjust before accepting',
+    'insights.cancel': 'Cancel',
+    'insights.save': 'Save',
+    'insights.setting.reading_speed': 'Reading speed',
+    'insights.setting.narrator_voice': 'Narrator voice',
+    'insights.setting.volume': 'Volume',
+    'insights.setting.text_scale': 'Text size',
+    'insights.setting.reduced_animations': 'Reduced animations',
+    'insights.setting.auto_play_next': 'Auto-play next page',
+    'insights.setting.read_along': 'Read-along highlight',
+    'insights.bool_on': 'On',
+    'insights.bool_off': 'Off',
   };
 
   // ---------------- BAHASA MALAYSIA ----------------
@@ -649,5 +686,42 @@ class AppStrings {
     'insights.mood.calm': 'Tenang',
     'insights.mood.curious': 'Ingin tahu',
     'insights.mood.sleepy': 'Mengantuk',
+
+    // UC-9: Cadangan AI berdasarkan tingkah laku mendengar
+    'insights.suggestions_title': 'Cadangan AI',
+    'insights.suggestions_sub':
+        'Pelarasan yang Gemini fikir boleh membantu kanak-kanak ini, berdasarkan aktiviti mendengar terkini.',
+    'insights.suggestions_pick_child':
+        'Pilih seorang kanak-kanak di atas untuk melihat cadangan peribadi.',
+    'insights.run_analysis': 'Jalankan analisis AI',
+    'insights.refresh_analysis': 'Segarkan analisis',
+    'insights.analyzing': 'Bertanya kepada Gemini…',
+    'insights.no_suggestions_title': 'Tiada cadangan lagi',
+    'insights.no_suggestions_body':
+        'Ketik "Jalankan analisis AI" untuk meminta cadangan peribadi daripada Gemini.',
+    'insights.suggestions_low_confidence':
+        'Keyakinan rendah — berdasarkan sesi yang sangat sedikit. Gunakan aplikasi untuk seketika sebelum bergantung pada cadangan ini.',
+    'insights.suggestions_stale':
+        'Tidak dapat menyegarkan — menunjukkan cadangan sebelumnya.',
+    'insights.suggestions_generated_at': 'Dijana',
+    'insights.accept': 'Terima',
+    'insights.edit_accept': 'Edit & terima',
+    'insights.dismiss': 'Tolak',
+    'insights.applied_badge': 'Digunakan',
+    'insights.dismissed_badge': 'Ditolak',
+    'insights.current_value': 'Sekarang',
+    'insights.suggested_value': 'Dicadangkan',
+    'insights.edit_value_title': 'Laraskan sebelum menerima',
+    'insights.cancel': 'Batal',
+    'insights.save': 'Simpan',
+    'insights.setting.reading_speed': 'Kelajuan bacaan',
+    'insights.setting.narrator_voice': 'Suara pencerita',
+    'insights.setting.volume': 'Kelantangan',
+    'insights.setting.text_scale': 'Saiz teks',
+    'insights.setting.reduced_animations': 'Animasi dikurangkan',
+    'insights.setting.auto_play_next': 'Main halaman seterusnya',
+    'insights.setting.read_along': 'Sorotan baca bersama',
+    'insights.bool_on': 'Hidup',
+    'insights.bool_off': 'Mati',
   };
 }

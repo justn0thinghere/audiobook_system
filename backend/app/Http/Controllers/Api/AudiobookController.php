@@ -91,7 +91,7 @@ class AudiobookController extends ApiController
      * static file and just_audio would silently fail, putting the player into
      * its TTS fallback.
      *
-     * Already-absolute URLs (Pollinations/Gemini links) pass through unchanged.
+     * Already-absolute URLs (Gemini image links) pass through unchanged.
      */
     private function mediaUrl(?string $path): ?string
     {

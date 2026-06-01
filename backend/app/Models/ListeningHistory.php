@@ -24,12 +24,16 @@ class ListeningHistory extends Model
         'last_position_seconds',
         'mood',
         'completed',
+        'pause_count',
+        'skip_count',
     ];
 
     protected $casts = [
-        'duration_seconds' => 'integer',
+        'duration_seconds'      => 'integer',
         'last_position_seconds' => 'integer',
-        'completed' => 'boolean',
+        'completed'             => 'boolean',
+        'pause_count'           => 'integer',
+        'skip_count'            => 'integer',
     ];
 
     public function uniqueIds(): array

@@ -19,6 +19,8 @@ class ListeningHistoryController extends ApiController
             'last_position_seconds' => 'nullable|integer|min:0',
             'mood'                  => 'nullable|in:happy,calm,curious,sleepy',
             'completed'             => 'nullable|boolean',
+            'pause_count'           => 'nullable|integer|min:0',
+            'skip_count'            => 'nullable|integer|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -55,6 +57,8 @@ class ListeningHistoryController extends ApiController
             'last_position_seconds' => $history->last_position_seconds,
             'mood'                  => $history->mood,
             'completed'             => (bool) $history->completed,
+            'pause_count'           => (int) $history->pause_count,
+            'skip_count'            => (int) $history->skip_count,
         ]);
     }
 
@@ -79,6 +83,8 @@ class ListeningHistoryController extends ApiController
                 'last_position_seconds' => $h->last_position_seconds,
                 'mood'                  => $h->mood,
                 'completed'             => (bool) $h->completed,
+                'pause_count'           => (int) $h->pause_count,
+                'skip_count'            => (int) $h->skip_count,
                 'created_at'            => $h->created_at?->format('Y-m-d H:i:s'),
             ]);
 

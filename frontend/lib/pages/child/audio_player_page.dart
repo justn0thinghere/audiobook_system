@@ -57,6 +57,10 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   String? _sessionMood;
   bool _reachedEnd = false;
   bool _sessionRecorded = false;
+  // Behaviour counters fed into UC-9's analyse-listening-behaviour endpoint:
+  // every user-initiated pause and every forward page skip during a session.
+  int _pauseCount = 0;
+  int _skipCount = 0;
   bool _finishShowing = false;
   bool _naturalLoading = false;
   bool _naturalPlaying = false; // Gemini natural-voice narration is active
@@ -201,6 +205,8 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       lastPositionSeconds: seconds,
       mood: _sessionMood,
       completed: _reachedEnd,
+      pauseCount: _pauseCount,
+      skipCount: _skipCount,
     );
   }
 
@@ -347,6 +353,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     if (_playingAudio) {
       await _engine.pause();
       _listenWatch.stop();
+      _pauseCount++; // UC-9: user-initiated pause
     } else {
       unawaited(_engine.play()); // see note in _toggleNarration
       _listenWatch.start();
@@ -367,6 +374,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       if (_playingAudio) {
         await _engine.pause();
         _listenWatch.stop();
+        _pauseCount++; // UC-9: user-initiated pause
         if (mounted) setState(() => _playingAudio = false);
       } else {
         unawaited(_engine.play()); // see note in fresh-play branch below
@@ -704,6 +712,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   Future<void> _onPageChanged(int next) async {
     if (!mounted || next == _page) return;
     final wasNarrating = _naturalPlaying && _playingAudio;
+    // UC-9: count this as a "skip" only when the child manually moved forward
+    // (Next button / swipe). Reverse moves and the audio-driven auto-advance
+    // (flagged by _suppressAudioPageSeek below) don't count.
+    if (next > _page && !_suppressAudioPageSeek) {
+      _skipCount++;
+    }
     // Narration is per-page, so stop it when the page turns.
     if (_naturalPlaying) {
       await _stopNaturalVoice();

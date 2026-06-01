@@ -67,6 +67,11 @@ Route::middleware('session.auth')->group(function () {
 
     Route::prefix('insights')->group(function () {
         Route::post('/overview', [InsightsController::class, 'overview']);
+        // UC-9 — Analyse Listening Behaviour. Per-child suggestions.
+        Route::post('/{childId}/analyse',     [InsightsController::class, 'analyse'])->whereUuid('childId');
+        Route::post('/{childId}/suggestions', [InsightsController::class, 'suggestions'])->whereUuid('childId');
+        Route::post('/{childId}/suggestions/apply',   [InsightsController::class, 'applySuggestion'])->whereUuid('childId');
+        Route::post('/{childId}/suggestions/dismiss', [InsightsController::class, 'dismissSuggestion'])->whereUuid('childId');
     });
 
     // Natural-voice narration

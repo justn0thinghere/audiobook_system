@@ -82,7 +82,7 @@ The system supports **English and Bahasa Malaysia** for both the UI and AI-gener
 | **M1 General Module** | Caregiver registration, PIN login, PIN change, Guardian-PIN gate on Child Mode exit. Issues + validates the 24-hour Bearer session token. |
 | **M2 Personalisation Settings** | Create / view / update / delete child profiles. Per-child sensory settings (narrator voice, reading speed, volume, text size, reduced animations, auto-play, read-along) stored in a dedicated `child_settings` row keyed by `child_id`. App language toggle (en / ms). |
 | **M3 Content Management** | Manual upload (per-page text + image + cover, optional whole-book audio with page-boundary marks); AI generation (Gemini text + illustrations); browse / search / filter (type, age, language); caregiver preview using the same player the child sees. |
-| **M4 AI Module** | Wraps Gemini API calls — story generation (`gemini-2.5-flash`), illustration generation (`gemini-2.5-flash-image`, downscaled + JPEG-compressed via GD on save), narration synthesis (`gemini-2.5-flash-preview-tts`, cached server-side). Falls back to Pollinations.ai for images when configured. |
+| **M4 AI Module** | Wraps Gemini API calls — story generation (`gemini-2.5-flash`), illustration generation (`gemini-2.5-flash-image`, downscaled + JPEG-compressed via GD on save), narration synthesis (`gemini-2.5-flash-preview-tts`, cached server-side). |
 | **M5 Audio Playback Engine** | Storybook UI (sentence-paginated, embedded illustrations, 3-D book-flip with spine shadow). Word-by-word read-along (yellow highlight box). Audio sources: Gemini TTS (per-page cached WAV) or caregiver's whole-book recording (pages auto-flip at exact marked boundaries, or fall back to a word-count heuristic if unmarked). |
 | **M6 Listening Insights** | Records per-session metadata (duration, position, mood, completion). Caregiver dashboard with overall + per-child filtering, last-7-days chart, top stories, recent activity feed, average session length, current streak. |
 
@@ -196,8 +196,6 @@ php artisan key:generate
 #       GEMINI_API_KEY=<your_gemini_key>
 #       GEMINI_TEXT_MODEL=gemini-2.5-flash         # default
 #       GEMINI_IMAGE_MODEL=gemini-2.5-flash-image  # default (needs billing)
-#       GEMINI_IMAGE_PROVIDER=gemini               # or "pollinations" for free fallback
-#       POLLINATIONS_TOKEN=                        # optional, only if you use pollinations
 
 # 5. Run migrations
 php artisan migrate:fresh
@@ -374,7 +372,7 @@ Base URL: `http://<host>:8000/api`. Every request is `POST` (multipart only for 
 | **Login screen never connects** | Phone can't reach the PC's IP. Visit `http://<pc-ip>:8000` on the phone's browser to verify, then open the firewall (see [Testing on a Physical Phone](#testing-on-a-physical-phone)). |
 | **"Could not load this book's audio — using AI narration instead."** | The audio URL came back from the API but `just_audio` couldn't fetch the file. Most often this means `storage/` isn't published — re-run `php artisan storage:link` and confirm the file exists under `backend/storage/app/public/uploads/audio/`. |
 | **Validation failed: "audio file field must be a file of type: mp3, wav"** | Pull the latest backend — `audio_file` now validates with `mimetypes:audio/mpeg,audio/wav,…` which accepts every MP3 / WAV / M4A / AAC / OGG variant Android pickers actually return. |
-| **AI image generation returns HTTP 429 / quota 0** | `gemini-2.5-flash-image` requires a billing-enabled API key. Set up billing on the Gemini key, or set `GEMINI_IMAGE_PROVIDER=pollinations` in `.env` to use the free (slower, lower-quality) Pollinations.ai fallback. |
+| **AI image generation returns HTTP 429 / quota 0** | `gemini-2.5-flash-image` requires a **billing-enabled** Gemini API key (the free tier returns 0 quota for image generation). Enable billing on the key in Google AI Studio; story text generation continues to work on the free tier in the meantime. |
 | **Generated images load slowly on emulator** | Enable PHP's `gd` extension (uncomment `extension=gd` in `C:\xampp\php\php.ini`; restart Apache). On save, Gemini's 1024² PNGs get downscaled to ≤ 768² JPEG (~7–10× smaller). Existing images stay as-is. |
 | **"Cleartext HTTP not permitted"** | Only an issue on custom builds; the bundled manifest enables it. If you changed the manifest, restore `android:usesCleartextTraffic="true"`. |
 | **Phone shows a raw SQL error in a snackbar** | `APP_DEBUG=true` in `backend/.env` leaks the SQL exception. Set `APP_DEBUG=false` for friendlier "Server Error" messages. |

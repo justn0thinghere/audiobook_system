@@ -71,7 +71,7 @@ config/auth.php         User provider points to App\Models\Caregiver
 - **All IDs are 36-char UUIDs**, auto-generated via Laravel's `HasUuids` trait.
 - **Session token** is issued at `/auth/login` and `/auth/register`, sent back as `Authorization: Bearer <token>` on every protected request. Sliding 24-hour expiry — see [`SessionAuthMiddleware`](app/Http/Middleware/SessionAuthMiddleware.php).
 - **Response shape** is always `{ status, message, data?, error_code?, timestamp }`. Helpers `successResponse()` / `errorResponse()` on the base [`ApiController`](app/Http/Controllers/Api/ApiController.php) produce this.
-- **Media URLs are request-aware** — every controller has a `mediaUrl()` helper that builds absolute URLs from `request()->getSchemeAndHttpHost()`, so emulator clients (10.0.2.2) and real-device clients (LAN IP) each get a reachable URL without `.env` changes. Already-absolute URLs (Gemini / Pollinations image links) pass through unchanged.
+- **Media URLs are request-aware** — every controller has a `mediaUrl()` helper that builds absolute URLs from `request()->getSchemeAndHttpHost()`, so emulator clients (10.0.2.2) and real-device clients (LAN IP) each get a reachable URL without `.env` changes. Already-absolute URLs (Gemini image links) pass through unchanged.
 - **Per-child settings** live in their own `child_settings` table keyed by `child_id`; the historical `caregiver_settings` table is account-level only.
 
 ---
@@ -86,14 +86,12 @@ config/auth.php         User provider points to App\Models\Caregiver
 | Page illustrations | `gemini-2.5-flash-image` | **Needs a billing-enabled key** (free tier returns 0 quota). 1024² PNG output is downscaled to ≤ 768² JPEG on save via `gd`. |
 | Narration (TTS) | `gemini-2.5-flash-preview-tts` | Per-page WAV cached by SHA-1 of `(voice|text)` under `storage/app/public/tts/`. |
 
-Set the key + provider in `.env`:
+Set the key in `.env`:
 
 ```dotenv
 GEMINI_API_KEY=...
 GEMINI_TEXT_MODEL=gemini-2.5-flash
 GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
-GEMINI_IMAGE_PROVIDER=gemini       # or "pollinations" for a free fallback
-POLLINATIONS_TOKEN=                # only needed if you switch to pollinations
 ```
 
 Image generation is dispatched via [`App\Jobs\GenerateAudiobookImages`](app/Jobs/GenerateAudiobookImages.php) so the create-audiobook request returns immediately; pages show a *Generating…* state in the app while the job runs.

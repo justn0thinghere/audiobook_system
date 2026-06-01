@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+import '../models/ai_suggestion.dart';
 import '../models/audiobook.dart';
 import '../models/caregiver.dart';
 import '../models/child_profile.dart';
@@ -586,6 +587,8 @@ class DatabaseService {
     int? lastPositionSeconds,
     String? mood,
     bool? completed,
+    int? pauseCount,
+    int? skipCount,
   }) {
     return _post('/listening-history/record', body: {
       'child_id': childId,
@@ -594,6 +597,8 @@ class DatabaseService {
       if (lastPositionSeconds != null) 'last_position_seconds': lastPositionSeconds,
       if (mood != null) 'mood': mood,
       if (completed != null) 'completed': completed,
+      if (pauseCount != null) 'pause_count': pauseCount,
+      if (skipCount != null) 'skip_count': skipCount,
     });
   }
 
@@ -612,6 +617,60 @@ class DatabaseService {
         success: true,
         message: resp.message,
         data: InsightsOverview.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
+  // ---------- UC-9: AI listening-behaviour suggestions ----------
+
+  /// Fetch the cached suggestion snapshot for [childId] without triggering a
+  /// new Gemini call. Used by the insights page when it first opens.
+  static Future<ApiResponse> getSuggestions(String childId) async {
+    final resp = await _post('/insights/$childId/suggestions');
+    return _wrapSuggestionResponse(resp);
+  }
+
+  /// Run a fresh listening-behaviour analysis for [childId]. May take a few
+  /// seconds (Gemini text call); on failure the backend re-serves the previous
+  /// cached snapshot with `isStale = true`.
+  static Future<ApiResponse> analyseListening(String childId) async {
+    final resp = await _post('/insights/$childId/analyse');
+    return _wrapSuggestionResponse(resp);
+  }
+
+  /// Accept a single suggestion item, optionally overriding the suggested
+  /// value (UC-9 A2). The backend writes the value straight into the child's
+  /// settings row and marks the suggestion as accepted/edited.
+  static Future<ApiResponse> applySuggestion({
+    required String childId,
+    required String itemId,
+    dynamic overrideValue,
+  }) async {
+    final resp = await _post('/insights/$childId/suggestions/apply', body: {
+      'item_id': itemId,
+      if (overrideValue != null) 'override_value': overrideValue,
+    });
+    return _wrapSuggestionResponse(resp);
+  }
+
+  /// Mark a suggestion as dismissed without touching child_settings.
+  static Future<ApiResponse> dismissSuggestion({
+    required String childId,
+    required String itemId,
+  }) async {
+    final resp = await _post('/insights/$childId/suggestions/dismiss', body: {
+      'item_id': itemId,
+    });
+    return _wrapSuggestionResponse(resp);
+  }
+
+  static ApiResponse _wrapSuggestionResponse(ApiResponse resp) {
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: AiSuggestion.fromJson(resp.data as Map<String, dynamic>),
       );
     }
     return resp;
