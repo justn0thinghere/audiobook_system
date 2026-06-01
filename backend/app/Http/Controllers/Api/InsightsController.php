@@ -93,6 +93,10 @@ class InsightsController extends ApiController
     public function overview(Request $request): JsonResponse
     {
         $caregiver = $request->get('auth_caregiver');
+        $this->logEvent('Insights', 'overview called', [
+            'caregiver_id' => $caregiver?->caregiver_id,
+            'child_id'     => $request->input('child_id'),
+        ]);
         // The 'children' list always carries every profile (the UI's selector
         // needs them all); $scopedProfiles is what each per-child / aggregate
         // query iterates over, optionally narrowed to one child via ?child_id=.
@@ -102,6 +106,9 @@ class InsightsController extends ApiController
             ? $allProfiles->where('child_id', $filterChildId)->values()
             : $allProfiles;
         if ($filterChildId && $scopedProfiles->isEmpty()) {
+            $this->logWarn('Insights', 'overview child not found', [
+                'child_id' => $filterChildId,
+            ]);
             return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
         }
         $profiles = $scopedProfiles;
@@ -195,8 +202,14 @@ class InsightsController extends ApiController
      */
     public function analyse(Request $request, string $childId): JsonResponse
     {
+        $this->logEvent('Insights', 'analyse called', [
+            'child_id' => $childId,
+        ]);
         $profile = $this->ownedProfile($request, $childId);
         if (!$profile) {
+            $this->logWarn('Insights', 'analyse child not found', [
+                'child_id' => $childId,
+            ]);
             return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
         }
 
@@ -204,6 +217,11 @@ class InsightsController extends ApiController
         $confidence = $stats['sessions_count'] < self::MIN_SESSIONS_FOR_CONFIDENCE
             ? 'low'
             : 'normal';
+        $this->logEvent('Insights', 'analyse stats aggregated', [
+            'child_id'       => $childId,
+            'sessions_count' => $stats['sessions_count'],
+            'confidence'     => $confidence,
+        ]);
 
         // Tell Gemini what the current settings are so it doesn't suggest a
         // no-op change.
@@ -225,6 +243,10 @@ class InsightsController extends ApiController
             : [];
 
         if (empty($rawItems)) {
+            $this->logWarn('Insights', 'analyse gemini empty', [
+                'child_id'    => $childId,
+                'configured'  => $gemini->isConfigured(),
+            ]);
             // E2: Gemini unreachable / quota / nothing to suggest. Re-serve the
             // last cached row marked stale so the caregiver still sees something
             // with a clear "couldn't refresh" note.
@@ -232,9 +254,15 @@ class InsightsController extends ApiController
             if ($cached) {
                 $cached->is_stale = true;
                 $cached->save();
+                $this->logEvent('Insights', 'analyse serving stale cache', [
+                    'child_id' => $childId,
+                ]);
                 return $this->successResponse('Suggestions ready (cached)',
                     $this->serializeSuggestion($cached));
             }
+            $this->logEvent('Insights', 'analyse no cache available', [
+                'child_id' => $childId,
+            ]);
             // No cached row either — return an empty result so the UI can show
             // an "AI suggestions unavailable" state.
             return $this->successResponse('No suggestions available', [
@@ -286,6 +314,11 @@ class InsightsController extends ApiController
             ]
         );
 
+        $this->logEvent('Insights', 'analyse success', [
+            'child_id'  => $childId,
+            'raw_items' => count($rawItems),
+            'kept'      => count($items),
+        ]);
         return $this->successResponse('Suggestions ready',
             $this->serializeSuggestion($row));
     }
@@ -297,12 +330,21 @@ class InsightsController extends ApiController
      */
     public function suggestions(Request $request, string $childId): JsonResponse
     {
+        $this->logEvent('Insights', 'suggestions called', [
+            'child_id' => $childId,
+        ]);
         $profile = $this->ownedProfile($request, $childId);
         if (!$profile) {
+            $this->logWarn('Insights', 'suggestions child not found', [
+                'child_id' => $childId,
+            ]);
             return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
         }
         $cached = AiSuggestion::where('child_id', $profile->child_id)->first();
         if (!$cached) {
+            $this->logEvent('Insights', 'suggestions empty (no cache)', [
+                'child_id' => $childId,
+            ]);
             return $this->successResponse('No suggestions yet', [
                 'suggestion_id' => null,
                 'child_id'      => $profile->child_id,
@@ -323,8 +365,16 @@ class InsightsController extends ApiController
      */
     public function applySuggestion(Request $request, string $childId): JsonResponse
     {
+        $this->logEvent('Insights', 'applySuggestion called', [
+            'child_id'    => $childId,
+            'item_id'     => $request->input('item_id'),
+            'has_override' => $request->has('override_value'),
+        ]);
         $profile = $this->ownedProfile($request, $childId);
         if (!$profile) {
+            $this->logWarn('Insights', 'applySuggestion child not found', [
+                'child_id' => $childId,
+            ]);
             return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
         }
 
@@ -333,6 +383,9 @@ class InsightsController extends ApiController
             'override_value' => 'sometimes|nullable',
         ]);
         if ($validator->fails()) {
+            $this->logWarn('Insights', 'applySuggestion validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -342,16 +395,27 @@ class InsightsController extends ApiController
 
         $row = AiSuggestion::where('child_id', $profile->child_id)->first();
         if (!$row) {
+            $this->logWarn('Insights', 'applySuggestion no cached row', [
+                'child_id' => $childId,
+            ]);
             return $this->errorResponse('No suggestions to apply', 'NOT_FOUND', 404);
         }
 
         $items = $row->items;
         $idx = $this->findItemIndex($items, $request->input('item_id'));
         if ($idx === null) {
+            $this->logWarn('Insights', 'applySuggestion item not found', [
+                'child_id' => $childId,
+                'item_id'  => $request->input('item_id'),
+            ]);
             return $this->errorResponse('Suggestion item not found', 'NOT_FOUND', 404);
         }
         $item = $items[$idx];
         if (($item['status'] ?? 'pending') !== 'pending') {
+            $this->logWarn('Insights', 'applySuggestion already resolved', [
+                'item_id' => $item['id'] ?? null,
+                'status'  => $item['status'] ?? null,
+            ]);
             return $this->errorResponse('This suggestion has already been resolved',
                 'ALREADY_RESOLVED', 409);
         }
@@ -360,6 +424,9 @@ class InsightsController extends ApiController
         $validators = $this->settingValidators();
         $key = (string) $item['setting_key'];
         if (!isset($validators[$key])) {
+            $this->logWarn('Insights', 'applySuggestion unknown setting', [
+                'setting_key' => $key,
+            ]);
             return $this->errorResponse('Unknown setting in suggestion', 'INVALID', 422);
         }
         $rawValue = $request->has('override_value')
@@ -367,6 +434,10 @@ class InsightsController extends ApiController
             : ($item['suggested_value'] ?? null);
         [$ok, $value] = $validators[$key]($rawValue);
         if (!$ok) {
+            $this->logWarn('Insights', 'applySuggestion value out of range', [
+                'setting_key' => $key,
+                'raw_value'   => $rawValue,
+            ]);
             return $this->errorResponse('Suggested value is out of range', 'INVALID', 422);
         }
 
@@ -380,6 +451,12 @@ class InsightsController extends ApiController
         $row->items = $items;
         $row->save();
 
+        $this->logEvent('Insights', 'applySuggestion success', [
+            'child_id'    => $childId,
+            'setting_key' => $key,
+            'value'       => $value,
+            'status'      => $items[$idx]['status'],
+        ]);
         return $this->successResponse('Suggestion applied',
             $this->serializeSuggestion($row));
     }
@@ -387,8 +464,15 @@ class InsightsController extends ApiController
     /** Mark a single suggestion as dismissed without changing settings. */
     public function dismissSuggestion(Request $request, string $childId): JsonResponse
     {
+        $this->logEvent('Insights', 'dismissSuggestion called', [
+            'child_id' => $childId,
+            'item_id'  => $request->input('item_id'),
+        ]);
         $profile = $this->ownedProfile($request, $childId);
         if (!$profile) {
+            $this->logWarn('Insights', 'dismissSuggestion child not found', [
+                'child_id' => $childId,
+            ]);
             return $this->errorResponse('Child profile not found', 'NOT_FOUND', 404);
         }
 
@@ -396,6 +480,9 @@ class InsightsController extends ApiController
             'item_id' => 'required|string',
         ]);
         if ($validator->fails()) {
+            $this->logWarn('Insights', 'dismissSuggestion validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -405,18 +492,28 @@ class InsightsController extends ApiController
 
         $row = AiSuggestion::where('child_id', $profile->child_id)->first();
         if (!$row) {
+            $this->logWarn('Insights', 'dismissSuggestion no cached row', [
+                'child_id' => $childId,
+            ]);
             return $this->errorResponse('No suggestions to dismiss', 'NOT_FOUND', 404);
         }
 
         $items = $row->items;
         $idx = $this->findItemIndex($items, $request->input('item_id'));
         if ($idx === null) {
+            $this->logWarn('Insights', 'dismissSuggestion item not found', [
+                'item_id' => $request->input('item_id'),
+            ]);
             return $this->errorResponse('Suggestion item not found', 'NOT_FOUND', 404);
         }
         $items[$idx]['status'] = 'dismissed';
         $row->items = $items;
         $row->save();
 
+        $this->logEvent('Insights', 'dismissSuggestion success', [
+            'child_id' => $childId,
+            'item_id'  => $items[$idx]['id'] ?? null,
+        ]);
         return $this->successResponse('Suggestion dismissed',
             $this->serializeSuggestion($row));
     }

@@ -13,6 +13,9 @@ class AudiobookController extends ApiController
 {
     public function getAudiobookData(Request $request, string $audiobookId): JsonResponse
     {
+        $this->logEvent('Audiobook', 'getAudiobookData called', [
+            'audiobook_id' => $audiobookId,
+        ]);
         try {
             $validator = Validator::make(
                 ['audiobook_id' => $audiobookId],
@@ -20,6 +23,9 @@ class AudiobookController extends ApiController
             );
 
             if ($validator->fails()) {
+                $this->logWarn('Audiobook', 'getAudiobookData invalid uuid', [
+                    'audiobook_id' => $audiobookId,
+                ]);
                 return $this->errorResponse(
                     'Validation failed: ' . implode(', ', $validator->errors()->all()),
                     'VALIDATION_ERROR',
@@ -30,10 +36,16 @@ class AudiobookController extends ApiController
             $audiobook = Audiobook::where('audiobook_id', $audiobookId)->first();
 
             if (!$audiobook) {
-                Log::error('Audiobook not found via API', ['audiobook_id' => $audiobookId]);
+                $this->logWarn('Audiobook', 'getAudiobookData not found', [
+                    'audiobook_id' => $audiobookId,
+                ]);
                 return $this->errorResponse('Audiobook not found.', 'AUDIOBOOK_NOT_FOUND', 404);
             }
 
+            $this->logEvent('Audiobook', 'getAudiobookData success', [
+                'audiobook_id' => $audiobook->audiobook_id,
+                'pages'        => $audiobook->pages->count(),
+            ]);
             return $this->successResponse('Audiobook data retrieved successfully', [
                 'audiobook_id'     => $audiobook->audiobook_id,
                 'title'            => $audiobook->title,
@@ -69,9 +81,9 @@ class AudiobookController extends ApiController
                     : null,
             ]);
         } catch (\Throwable $e) {
-            Log::error('Audiobook fetch error', [
-                'error' => $e->getMessage(),
+            $this->logError('Audiobook', 'getAudiobookData exception', [
                 'audiobook_id' => $audiobookId ?? 'unknown',
+                'error'        => $e->getMessage(),
             ]);
             return $this->errorResponse('Internal server error', 'SERVER_ERROR', 500);
         }

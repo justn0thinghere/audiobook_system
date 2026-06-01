@@ -38,22 +38,40 @@ class GenerateAudiobookImages implements ShouldQueue
 
     public function handle(GeminiService $gemini): void
     {
+        Log::info('[ImageJob] handle started', [
+            'audiobook_id' => $this->audiobookId,
+        ]);
         $book = Audiobook::with('pages')->find($this->audiobookId);
         if (!$book) {
+            Log::warning('[ImageJob] book not found', [
+                'audiobook_id' => $this->audiobookId,
+            ]);
             return;
         }
 
         $coverImagePath = null;
+        $succeeded = 0;
+        $failed = 0;
 
         foreach ($book->pages as $page) {
             $prompt = $page->image_prompt !== null && $page->image_prompt !== ''
                 ? $page->image_prompt
                 : (string) $page->text;
 
+            Log::info('[ImageJob] generating page', [
+                'audiobook_id' => $book->audiobook_id,
+                'page_number'  => $page->page_number,
+            ]);
             $path = $gemini->downloadImage($prompt);
 
             $page->image = $path;
             $page->save();
+
+            if ($path !== null) {
+                $succeeded++;
+            } else {
+                $failed++;
+            }
 
             $coverImagePath ??= $path;
         }
@@ -62,9 +80,11 @@ class GenerateAudiobookImages implements ShouldQueue
         $book->status = 'available';
         $book->save();
 
-        Log::info('Audiobook images generated', [
+        Log::info('[ImageJob] handle finished', [
             'audiobook_id' => $book->audiobook_id,
             'pages'        => $book->pages->count(),
+            'succeeded'    => $succeeded,
+            'failed'       => $failed,
         ]);
     }
 
@@ -76,7 +96,7 @@ class GenerateAudiobookImages implements ShouldQueue
             $book->status = 'available';
             $book->save();
         }
-        Log::error('Audiobook image job failed', [
+        Log::error('[ImageJob] job failed', [
             'audiobook_id' => $this->audiobookId,
             'error'        => $e->getMessage(),
         ]);

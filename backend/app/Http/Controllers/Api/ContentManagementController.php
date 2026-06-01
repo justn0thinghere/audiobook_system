@@ -15,6 +15,7 @@ class ContentManagementController extends ApiController
 {
     public function getContentSummary(Request $request): JsonResponse
     {
+        $this->logEvent('Content', 'getContentSummary called');
         try {
             return $this->successResponse('Content summary retrieved successfully', [
                 'total_items'  => Audiobook::count(),
@@ -23,13 +24,22 @@ class ContentManagementController extends ApiController
                 'ai_generated' => Audiobook::where('is_generated', 1)->count(),
             ]);
         } catch (\Throwable $e) {
-            Log::error('Content summary error', ['error' => $e->getMessage()]);
+            $this->logError('Content', 'getContentSummary exception', [
+                'error' => $e->getMessage(),
+            ]);
             return $this->errorResponse('Internal server error', 'SERVER_ERROR', 500);
         }
     }
 
     public function getContentList(Request $request): JsonResponse
     {
+        $this->logEvent('Content', 'getContentList called', [
+            'filter_type' => $request->input('filter_type'),
+            'search'      => $request->input('search'),
+            'category'    => $request->input('category'),
+            'age_group'   => $request->input('age_group'),
+            'language'    => $request->input('language'),
+        ]);
         try {
             $query = Audiobook::query()->orderByDesc('created_at');
 
@@ -71,17 +81,31 @@ class ContentManagementController extends ApiController
 
             $items = $query->get()->map(fn ($item) => $this->serialize($item))->toArray();
 
+            $this->logEvent('Content', 'getContentList success', [
+                'count' => count($items),
+            ]);
             return $this->successResponse('Content list retrieved successfully', [
                 'items' => $items,
             ]);
         } catch (\Throwable $e) {
-            Log::error('Content list error', ['error' => $e->getMessage()]);
+            $this->logError('Content', 'getContentList exception', [
+                'error' => $e->getMessage(),
+            ]);
             return $this->errorResponse('Internal server error', 'SERVER_ERROR', 500);
         }
     }
 
     public function createContent(Request $request): JsonResponse
     {
+        $this->logEvent('Content', 'createContent called', [
+            'title'        => $request->input('title'),
+            'has_audio'    => $request->hasFile('audio_file'),
+            'has_video'    => $request->hasFile('video_file'),
+            'has_cover'    => $request->hasFile('cover_image'),
+            'has_source'   => $request->hasFile('source_file'),
+            'language'     => $request->input('language'),
+            'is_generated' => $request->boolean('is_generated'),
+        ]);
         $validator = Validator::make($request->all(), [
             'title'        => 'required|string|max:255',
             'topic'        => 'nullable|string|max:100',
@@ -106,6 +130,9 @@ class ContentManagementController extends ApiController
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('Content', 'createContent validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -157,9 +184,13 @@ class ContentManagementController extends ApiController
                 'status'           => $isGenerated ? 'processing' : 'available',
             ]);
 
+            $this->logEvent('Content', 'createContent success', [
+                'audiobook_id' => $content->audiobook_id,
+                'type'         => $content->type,
+            ]);
             return $this->successResponse('Content uploaded successfully', $this->serialize($content));
         } catch (\Throwable $e) {
-            Log::error('Create content error', [
+            $this->logError('Content', 'createContent exception', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -173,6 +204,13 @@ class ContentManagementController extends ApiController
      */
     public function generateContent(Request $request, GeminiService $gemini): JsonResponse
     {
+        $this->logEvent('Content', 'generateContent called', [
+            'topic'          => $request->input('topic'),
+            'age_group'      => $request->input('age_group'),
+            'page_count'     => $request->input('page_count'),
+            'language'       => $request->input('language'),
+            'generate_image' => $request->boolean('generate_image'),
+        ]);
         $validator = Validator::make($request->all(), [
             'topic'          => 'required|string|max:255',
             'age_group'      => 'nullable|string|max:50',
@@ -186,6 +224,9 @@ class ContentManagementController extends ApiController
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('Content', 'generateContent validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -194,6 +235,7 @@ class ContentManagementController extends ApiController
         }
 
         if (!$gemini->isConfigured()) {
+            $this->logWarn('Content', 'generateContent AI not configured');
             return $this->errorResponse(
                 'AI is not configured. Add GEMINI_API_KEY to the backend .env file.',
                 'AI_NOT_CONFIGURED',
@@ -261,9 +303,17 @@ class ContentManagementController extends ApiController
                     ? 'Your storybook is ready, with a picture on every page!'
                     : 'Your storybook is being created — it will appear in the library when ready.');
 
+            $this->logEvent('Content', 'generateContent success', [
+                'audiobook_id'    => $content->audiobook_id,
+                'pages'           => count($story['pages']),
+                'status'          => $content->status,
+                'generate_images' => $generateImages,
+            ]);
             return $this->successResponse($message, $this->serialize($content->load('pages')));
         } catch (\Throwable $e) {
-            Log::error('AI generate content error', ['error' => $e->getMessage()]);
+            $this->logError('Content', 'generateContent exception', [
+                'error' => $e->getMessage(),
+            ]);
             return $this->errorResponse(
                 'AI generation failed: ' . $e->getMessage(),
                 'AI_FAILED',
@@ -278,8 +328,15 @@ class ContentManagementController extends ApiController
      */
     public function addPage(Request $request, string $audiobookId): JsonResponse
     {
+        $this->logEvent('Content', 'addPage called', [
+            'audiobook_id' => $audiobookId,
+            'has_image'    => $request->hasFile('image'),
+        ]);
         $book = Audiobook::where('audiobook_id', $audiobookId)->first();
         if (!$book) {
+            $this->logWarn('Content', 'addPage book not found', [
+                'audiobook_id' => $audiobookId,
+            ]);
             return $this->errorResponse('Audiobook not found', 'NOT_FOUND', 404);
         }
 
@@ -292,6 +349,9 @@ class ContentManagementController extends ApiController
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('Content', 'addPage validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -322,6 +382,11 @@ class ContentManagementController extends ApiController
                 $book->save();
             }
 
+            $this->logEvent('Content', 'addPage success', [
+                'audiobook_id' => $book->audiobook_id,
+                'page_id'      => $page->page_id,
+                'page_number'  => $page->page_number,
+            ]);
             return $this->successResponse('Page added', [
                 'page_id'     => $page->page_id,
                 'page_number' => $page->page_number,
@@ -329,7 +394,10 @@ class ContentManagementController extends ApiController
                 'image'       => $this->mediaUrl($page->image),
             ]);
         } catch (\Throwable $e) {
-            Log::error('Add page error', ['error' => $e->getMessage()]);
+            $this->logError('Content', 'addPage exception', [
+                'audiobook_id' => $audiobookId,
+                'error'        => $e->getMessage(),
+            ]);
             return $this->errorResponse('Could not add page', 'SERVER_ERROR', 500);
         }
     }

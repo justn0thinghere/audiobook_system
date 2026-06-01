@@ -24,12 +24,20 @@ class TtsController extends ApiController
      */
     public function speak(Request $request, GeminiService $gemini): JsonResponse
     {
+        $this->logEvent('Tts', 'speak called', [
+            'voice'       => $request->input('voice'),
+            'text_length' => strlen((string) $request->input('text')),
+        ]);
+
         $validator = Validator::make($request->all(), [
             'text'  => 'required|string|max:2000',
             'voice' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('Tts', 'speak validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -38,6 +46,7 @@ class TtsController extends ApiController
         }
 
         if (!$gemini->isConfigured()) {
+            $this->logWarn('Tts', 'speak AI not configured');
             return $this->errorResponse('AI is not configured.', 'AI_NOT_CONFIGURED', 503);
         }
 
@@ -45,6 +54,9 @@ class TtsController extends ApiController
         $path = $gemini->generateSpeech($request->input('text'), $voice);
 
         if (!$path) {
+            $this->logWarn('Tts', 'speak generation failed', [
+                'voice' => $voice,
+            ]);
             return $this->errorResponse(
                 'Could not generate the natural voice. Please try again.',
                 'TTS_FAILED',
@@ -52,6 +64,10 @@ class TtsController extends ApiController
             );
         }
 
+        $this->logEvent('Tts', 'speak success', [
+            'voice' => $voice,
+            'path'  => $path,
+        ]);
         return $this->successResponse('OK', ['audio_url' => url($path)]);
     }
 }

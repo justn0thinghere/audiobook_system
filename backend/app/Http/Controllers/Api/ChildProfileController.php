@@ -13,13 +13,25 @@ class ChildProfileController extends ApiController
     public function index(Request $request): JsonResponse
     {
         $caregiver = $request->get('auth_caregiver');
+        $this->logEvent('ChildProfile', 'index called', [
+            'caregiver_id' => $caregiver->caregiver_id,
+        ]);
         $profiles = $caregiver->childProfiles()->orderBy('created_at')->get()
             ->map(fn ($p) => $this->serialize($p));
+        $this->logEvent('ChildProfile', 'index success', [
+            'caregiver_id' => $caregiver->caregiver_id,
+            'count'        => $profiles->count(),
+        ]);
         return $this->successResponse('OK', $profiles);
     }
 
     public function store(Request $request): JsonResponse
     {
+        $caregiver = $request->get('auth_caregiver');
+        $this->logEvent('ChildProfile', 'store called', [
+            'caregiver_id' => $caregiver->caregiver_id,
+        ]);
+
         $validator = Validator::make($request->all(), [
             'name'           => 'required|string|max:50',
             'age'            => 'required|integer|min:1|max:18',
@@ -29,6 +41,9 @@ class ChildProfileController extends ApiController
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('ChildProfile', 'store validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -36,7 +51,6 @@ class ChildProfileController extends ApiController
             );
         }
 
-        $caregiver = $request->get('auth_caregiver');
         $profile = $caregiver->childProfiles()->create([
             'name'           => $request->input('name'),
             'age'            => $request->input('age'),
@@ -45,14 +59,27 @@ class ChildProfileController extends ApiController
             'favorite_genre' => $request->input('favorite_genre'),
         ]);
 
+        $this->logEvent('ChildProfile', 'store success', [
+            'caregiver_id' => $caregiver->caregiver_id,
+            'child_id'     => $profile->child_id,
+        ]);
         return $this->successResponse('Profile created', $this->serialize($profile));
     }
 
     public function update(Request $request, string $id): JsonResponse
     {
         $caregiver = $request->get('auth_caregiver');
+        $this->logEvent('ChildProfile', 'update called', [
+            'caregiver_id' => $caregiver->caregiver_id,
+            'child_id'     => $id,
+        ]);
+
         $profile = $caregiver->childProfiles()->where('child_id', $id)->first();
         if (!$profile) {
+            $this->logWarn('ChildProfile', 'update not found', [
+                'caregiver_id' => $caregiver->caregiver_id,
+                'child_id'     => $id,
+            ]);
             return $this->errorResponse('Profile not found', 'NOT_FOUND', 404);
         }
 
@@ -66,6 +93,9 @@ class ChildProfileController extends ApiController
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('ChildProfile', 'update validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -74,17 +104,30 @@ class ChildProfileController extends ApiController
         }
 
         $profile->fill($validator->validated())->save();
+        $this->logEvent('ChildProfile', 'update success', [
+            'child_id' => $profile->child_id,
+        ]);
         return $this->successResponse('Profile updated', $this->serialize($profile));
     }
 
     public function destroy(Request $request, string $id): JsonResponse
     {
         $caregiver = $request->get('auth_caregiver');
+        $this->logEvent('ChildProfile', 'destroy called', [
+            'caregiver_id' => $caregiver->caregiver_id,
+            'child_id'     => $id,
+        ]);
         $profile = $caregiver->childProfiles()->where('child_id', $id)->first();
         if (!$profile) {
+            $this->logWarn('ChildProfile', 'destroy not found', [
+                'child_id' => $id,
+            ]);
             return $this->errorResponse('Profile not found', 'NOT_FOUND', 404);
         }
         $profile->delete();
+        $this->logEvent('ChildProfile', 'destroy success', [
+            'child_id' => $id,
+        ]);
         return $this->successResponse('Profile deleted');
     }
 
@@ -94,8 +137,14 @@ class ChildProfileController extends ApiController
      */
     public function showSettings(Request $request, string $id): JsonResponse
     {
+        $this->logEvent('ChildProfile', 'showSettings called', [
+            'child_id' => $id,
+        ]);
         $profile = $this->ownedProfile($request, $id);
         if (!$profile) {
+            $this->logWarn('ChildProfile', 'showSettings not found', [
+                'child_id' => $id,
+            ]);
             return $this->errorResponse('Profile not found', 'NOT_FOUND', 404);
         }
         $settings = $profile->childSettings
@@ -105,8 +154,15 @@ class ChildProfileController extends ApiController
 
     public function updateSettings(Request $request, string $id): JsonResponse
     {
+        $this->logEvent('ChildProfile', 'updateSettings called', [
+            'child_id' => $id,
+            'fields'   => array_keys($request->all()),
+        ]);
         $profile = $this->ownedProfile($request, $id);
         if (!$profile) {
+            $this->logWarn('ChildProfile', 'updateSettings not found', [
+                'child_id' => $id,
+            ]);
             return $this->errorResponse('Profile not found', 'NOT_FOUND', 404);
         }
 
@@ -121,6 +177,9 @@ class ChildProfileController extends ApiController
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('ChildProfile', 'updateSettings validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -132,6 +191,9 @@ class ChildProfileController extends ApiController
             ?? ChildSettings::create(['child_id' => $profile->child_id]);
         $settings->fill($validator->validated())->save();
 
+        $this->logEvent('ChildProfile', 'updateSettings success', [
+            'child_id' => $profile->child_id,
+        ]);
         return $this->successResponse('Settings updated', $this->serializeSettings($settings));
     }
 

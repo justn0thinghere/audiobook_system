@@ -43,7 +43,16 @@ class GeminiService
     public function downloadImage(string $prompt): ?string
     {
         $this->lastImageError = null;
-        return $this->generateWithGemini($this->styledPrompt($prompt));
+        Log::info('[Gemini] downloadImage called', [
+            'prompt_length' => strlen($prompt),
+        ]);
+        $result = $this->generateWithGemini($this->styledPrompt($prompt));
+        Log::info('[Gemini] downloadImage finished', [
+            'success'    => $result !== null,
+            'path'       => $result,
+            'last_error' => $this->lastImageError,
+        ]);
+        return $result;
     }
 
     /**
@@ -58,10 +67,19 @@ class GeminiService
             return null;
         }
 
+        Log::info('[Gemini] generateSpeech called', [
+            'voice'       => $voice,
+            'text_length' => strlen($text),
+        ]);
+
         $path = 'tts/' . sha1($voice . '|' . $text) . '.wav';
         if (Storage::disk('public')->exists($path)) {
+            Log::info('[Gemini] generateSpeech cache hit', ['path' => $path]);
             return 'storage/' . $path;
         }
+        Log::info('[Gemini] generateSpeech cache miss — calling Gemini TTS', [
+            'voice' => $voice,
+        ]);
 
         try {
             $model = 'gemini-2.5-flash-preview-tts';
@@ -83,7 +101,7 @@ class GeminiService
             );
 
             if (!$response->successful()) {
-                Log::warning('Gemini TTS error', [
+                Log::warning('[Gemini] TTS HTTP error', [
                     'status' => $response->status(),
                     'body'   => mb_substr($response->body(), 0, 300),
                 ]);
@@ -104,9 +122,13 @@ class GeminiService
             // Gemini returns 16-bit signed PCM, 24 kHz, mono — wrap it in a WAV
             // container so the app can play it with a normal audio player.
             Storage::disk('public')->put($path, $this->pcmToWav($pcm, 24000, 1, 16));
+            Log::info('[Gemini] generateSpeech success', [
+                'path'  => $path,
+                'bytes' => strlen($pcm),
+            ]);
             return 'storage/' . $path;
         } catch (\Throwable $e) {
-            Log::warning('Gemini TTS exception', ['error' => $e->getMessage()]);
+            Log::warning('[Gemini] TTS exception', ['error' => $e->getMessage()]);
             return null;
         }
     }
@@ -148,6 +170,11 @@ class GeminiService
      */
     public function analyseListening(array $stats): array
     {
+        Log::info('[Gemini] analyseListening called', [
+            'sessions_count' => $stats['sessions_count'] ?? null,
+            'pause_rate'     => $stats['pause_rate'] ?? null,
+            'skip_rate'      => $stats['skip_rate'] ?? null,
+        ]);
         $payload = json_encode($stats, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $prompt = <<<PROMPT
 You are advising a caregiver on how to better tune an audiobook reader app for
@@ -214,7 +241,7 @@ PROMPT;
             );
 
             if (!$response->successful()) {
-                Log::warning('Gemini analyse error', [
+                Log::warning('[Gemini] analyseListening HTTP error', [
                     'status' => $response->status(),
                     'body'   => mb_substr($response->body(), 0, 300),
                 ]);
@@ -223,6 +250,7 @@ PROMPT;
 
             $text = data_get($response->json(), 'candidates.0.content.parts.0.text');
             if (!$text) {
+                Log::warning('[Gemini] analyseListening empty response');
                 return [];
             }
             $parsed = json_decode($text, true);
@@ -246,9 +274,13 @@ PROMPT;
                     'reason'          => $reason,
                 ];
             }
+            Log::info('[Gemini] analyseListening success', [
+                'items_returned' => count($items),
+                'items_kept'     => count($clean),
+            ]);
             return $clean;
         } catch (\Throwable $e) {
-            Log::warning('Gemini analyse exception', ['error' => $e->getMessage()]);
+            Log::warning('[Gemini] analyseListening exception', ['error' => $e->getMessage()]);
             return [];
         }
     }
@@ -269,6 +301,13 @@ PROMPT;
      */
     public function generateStory(string $topic, ?string $ageGroup, ?string $sourceText, ?int $pageCount = null, ?string $language = null): array
     {
+        Log::info('[Gemini] generateStory called', [
+            'topic'      => $topic,
+            'age_group'  => $ageGroup,
+            'page_count' => $pageCount,
+            'language'   => $language,
+            'model'      => $this->textModel,
+        ]);
         $age = $ageGroup ?: '7-9';
         $instruction = ($sourceText !== null && trim($sourceText) !== '')
             ? "Rewrite the following text into a calming, autism-friendly children's story.\n\nTEXT:\n" . trim($sourceText)
@@ -348,12 +387,14 @@ PROMPT;
         );
 
         if ($response->status() === 429) {
-            Log::warning('Gemini quota exceeded', ['body' => $response->body()]);
+            Log::warning('[Gemini] generateStory quota exceeded (429)', [
+                'body' => $response->body(),
+            ]);
             throw new \RuntimeException($this->quotaMessage($response->json()));
         }
 
         if (!$response->successful()) {
-            Log::error('Gemini text error', [
+            Log::error('[Gemini] generateStory HTTP error', [
                 'status' => $response->status(),
                 'body'   => $response->body(),
             ]);
@@ -391,6 +432,10 @@ PROMPT;
             $pages[] = ['text' => $body, 'image_prompt' => $topic !== '' ? $topic : $title];
         }
 
+        Log::info('[Gemini] generateStory success', [
+            'pages' => count($pages),
+            'title' => $title,
+        ]);
         return [
             'title'        => $title,
             'content'      => implode("\n\n", array_column($pages, 'text')),
@@ -402,6 +447,9 @@ PROMPT;
     /** Image generation via Google Gemini (requires a billing-enabled key). */
     private function generateWithGemini(string $fullPrompt): ?string
     {
+        Log::info('[Gemini] generateWithGemini calling API', [
+            'model' => $this->imageModel,
+        ]);
         try {
             $response = Http::timeout(90)->post(
                 "{$this->base}/{$this->imageModel}:generateContent?key={$this->key}",
@@ -418,7 +466,7 @@ PROMPT;
             );
 
             if (!$response->successful()) {
-                Log::warning('Gemini image error', [
+                Log::warning('[Gemini] image HTTP error', [
                     'status' => $response->status(),
                     'body'   => $response->body(),
                 ]);
@@ -447,11 +495,11 @@ PROMPT;
                 }
             }
 
-            Log::warning('Gemini image returned no inline image data');
+            Log::warning('[Gemini] image returned no inline image data');
             $this->lastImageError = 'The AI did not return an image. Please try a different topic.';
             return null;
         } catch (\Throwable $e) {
-            Log::warning('Gemini image exception', ['error' => $e->getMessage()]);
+            Log::warning('[Gemini] image exception', ['error' => $e->getMessage()]);
             $this->lastImageError = 'Image generation timed out or failed. The story was saved without a picture.';
             return null;
         }

@@ -13,10 +13,18 @@ class SessionAuthMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
+        Log::info('[Auth] middleware enter', [
+            'path'   => $request->path(),
+            'method' => $request->method(),
+            'ip'     => $request->ip(),
+        ]);
         try {
             $authHeader = $request->header('Authorization');
 
             if (!$authHeader) {
+                Log::warning('[Auth] middleware missing header', [
+                    'path' => $request->path(),
+                ]);
                 return $this->unauthorized('Authorization header missing', 'MISSING_AUTH_HEADER');
             }
 
@@ -25,6 +33,9 @@ class SessionAuthMiddleware
                 : $authHeader;
 
             if (!$token) {
+                Log::warning('[Auth] middleware invalid format', [
+                    'path' => $request->path(),
+                ]);
                 return $this->unauthorized('Invalid authorization format', 'INVALID_AUTH_FORMAT');
             }
 
@@ -34,10 +45,10 @@ class SessionAuthMiddleware
                 ->first();
 
             if (!$caregiver) {
-                Log::warning('Invalid or expired session token attempt', [
+                Log::warning('[Auth] middleware invalid/expired token', [
                     'token_prefix' => substr($token, 0, 10) . '...',
-                    'ip' => $request->ip(),
-                    'user_agent' => $request->userAgent(),
+                    'ip'           => $request->ip(),
+                    'user_agent'   => $request->userAgent(),
                 ]);
                 return $this->unauthorized('Invalid or expired session token', 'INVALID_SESSION');
             }
@@ -47,13 +58,20 @@ class SessionAuthMiddleware
             if ($minutesLeft < 60) {
                 $caregiver->session_expires = Carbon::now('Asia/Kuala_Lumpur')->addHours(24);
                 $caregiver->save();
+                Log::info('[Auth] middleware sliding expiry refreshed', [
+                    'caregiver_id' => $caregiver->caregiver_id,
+                ]);
             }
 
             $request->merge(['auth_caregiver' => $caregiver]);
+            Log::info('[Auth] middleware authenticated', [
+                'caregiver_id' => $caregiver->caregiver_id,
+                'path'         => $request->path(),
+            ]);
 
             return $next($request);
         } catch (\Throwable $e) {
-            Log::error('SessionAuthMiddleware error', [
+            Log::error('[Auth] middleware exception', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);

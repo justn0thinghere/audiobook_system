@@ -15,6 +15,12 @@ class AuthController extends ApiController
 {
     public function register(Request $request): JsonResponse
     {
+        $this->logEvent('Auth', 'register called', [
+            'email'  => $request->input('email'),
+            'mobile' => $request->input('mobile_number'),
+            'ip'     => $request->ip(),
+        ]);
+
         $validator = Validator::make($request->all(), [
             'name'          => 'required|string|max:100',
             'pin'           => 'required|digits:4',
@@ -25,6 +31,9 @@ class AuthController extends ApiController
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('Auth', 'register validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -46,15 +55,26 @@ class AuthController extends ApiController
             // Create default settings row.
             CaregiverSettings::create(['caregiver_id' => $caregiver->caregiver_id]);
 
+            $this->logEvent('Auth', 'register success', [
+                'caregiver_id' => $caregiver->caregiver_id,
+            ]);
             return $this->loginCaregiver($caregiver, $request);
         } catch (\Throwable $e) {
-            Log::error('Register error', ['error' => $e->getMessage()]);
+            $this->logError('Auth', 'register exception', [
+                'error' => $e->getMessage(),
+            ]);
             return $this->errorResponse('Could not register caregiver', 'REGISTER_FAILED', 500);
         }
     }
 
     public function loginWithPin(Request $request): JsonResponse
     {
+        $this->logEvent('Auth', 'loginWithPin called', [
+            'email'  => $request->input('email'),
+            'mobile' => $request->input('mobile_number'),
+            'ip'     => $request->ip(),
+        ]);
+
         $validator = Validator::make($request->all(), [
             'pin'           => 'required|digits:4',
             'email'         => 'nullable|email',
@@ -65,6 +85,9 @@ class AuthController extends ApiController
         ]);
 
         if ($validator->fails()) {
+            $this->logWarn('Auth', 'login validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
             return $this->errorResponse(
                 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'VALIDATION_ERROR',
@@ -81,6 +104,7 @@ class AuthController extends ApiController
         } else {
             // No identifier — only works if exactly one caregiver exists.
             if (Caregiver::where('is_active', true)->count() !== 1) {
+                $this->logWarn('Auth', 'login missing identifier');
                 return $this->errorResponse(
                     'Please provide email or mobile number',
                     'IDENTIFIER_REQUIRED',
@@ -91,9 +115,15 @@ class AuthController extends ApiController
 
         $caregiver = $query->first();
         if (!$caregiver || !$caregiver->verifyPin($request->input('pin'))) {
+            $this->logWarn('Auth', 'login invalid credentials', [
+                'identifier_found' => (bool) $caregiver,
+            ]);
             return $this->errorResponse('Invalid credentials', 'INVALID_CREDENTIALS', 401);
         }
 
+        $this->logEvent('Auth', 'login success', [
+            'caregiver_id' => $caregiver->caregiver_id,
+        ]);
         return $this->loginCaregiver($caregiver, $request);
     }
 
@@ -130,6 +160,9 @@ class AuthController extends ApiController
     public function me(Request $request): JsonResponse
     {
         $caregiver = $request->get('auth_caregiver');
+        $this->logEvent('Auth', 'me called', [
+            'caregiver_id' => $caregiver->caregiver_id,
+        ]);
         return $this->successResponse('OK', [
             'caregiver_id'  => $caregiver->caregiver_id,
             'name'          => $caregiver->name,
@@ -141,6 +174,9 @@ class AuthController extends ApiController
     public function logout(Request $request): JsonResponse
     {
         $caregiver = $request->get('auth_caregiver');
+        $this->logEvent('Auth', 'logout called', [
+            'caregiver_id' => $caregiver->caregiver_id,
+        ]);
         $caregiver->session_token   = null;
         $caregiver->session_expires = null;
         $caregiver->save();
@@ -149,12 +185,19 @@ class AuthController extends ApiController
 
     public function verifyPin(Request $request): JsonResponse
     {
+        $caregiver = $request->get('auth_caregiver');
+        $this->logEvent('Auth', 'verifyPin called', [
+            'caregiver_id' => $caregiver->caregiver_id,
+        ]);
         $pin = (string) $request->input('pin');
         if (!preg_match('/^\d{4}$/', $pin)) {
+            $this->logWarn('Auth', 'verifyPin bad format');
             return $this->errorResponse('PIN must be 4 digits', 'VALIDATION_ERROR', 422);
         }
-        $caregiver = $request->get('auth_caregiver');
         if (!$caregiver->verifyPin($pin)) {
+            $this->logWarn('Auth', 'verifyPin mismatch', [
+                'caregiver_id' => $caregiver->caregiver_id,
+            ]);
             return $this->errorResponse('Invalid PIN', 'INVALID_PIN', 401);
         }
         return $this->successResponse('OK');
