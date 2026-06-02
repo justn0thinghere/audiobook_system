@@ -22,7 +22,13 @@ class _CategoryFilter {
 }
 
 class StoryLibraryPage extends StatefulWidget {
-  const StoryLibraryPage({super.key});
+  /// Optional override for the page's back arrow. ChildShell renders the
+  /// library as a tab body (no route on the navigator stack), so it passes a
+  /// callback that switches the shell back to the Home tab. When the library
+  /// is pushed standalone from ChildHomePage / a route, this stays null and
+  /// the default Navigator.maybePop() is used.
+  final VoidCallback? onBack;
+  const StoryLibraryPage({super.key, this.onBack});
 
   @override
   State<StoryLibraryPage> createState() => _StoryLibraryPageState();
@@ -161,7 +167,7 @@ class _StoryLibraryPageState extends State<StoryLibraryPage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
             children: [
-              BackPill(onTap: () => Navigator.of(context).maybePop()),
+              BackPill(onTap: widget.onBack ?? () => Navigator.of(context).maybePop()),
               const SizedBox(height: 16),
               Row(
                 children: [

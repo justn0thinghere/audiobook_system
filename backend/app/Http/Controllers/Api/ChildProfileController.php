@@ -168,9 +168,9 @@ class ChildProfileController extends ApiController
 
         $validator = Validator::make($request->all(), [
             'narrator_voice'     => 'sometimes|in:' . implode(',', ChildSettings::ALLOWED_VOICES),
-            'reading_speed'      => 'sometimes|numeric|min:0.5|max:1.5',
+            'reading_speed'      => 'sometimes|numeric|min:0.5|max:2.0',
             'volume'             => 'sometimes|numeric|min:0|max:1',
-            'text_scale'         => 'sometimes|numeric|min:0.8|max:1.6',
+            'text_scale'         => 'sometimes|numeric|min:0.7|max:2.0',
             'reduced_animations' => 'sometimes|boolean',
             'auto_play_next'     => 'sometimes|boolean',
             'read_along'         => 'sometimes|boolean',

@@ -29,17 +29,21 @@ class _CaregiverShellState extends State<CaregiverShell> {
   ];
 
   Widget _pageFor(int i) {
+    // Back arrows on tab pages need to jump back to Dashboard, not pop the
+    // navigator — these pages are tab bodies, not pushed routes, so
+    // Navigator.maybePop() finds nothing on the stack.
+    void backToDashboard() => setState(() => _index = 0);
     switch (i) {
       case 0:
         return CaregiverDashboardPage(onJumpToTab: (idx) => setState(() => _index = idx));
       case 1:
         return const ProfilesPage();
       case 2:
-        return const ContentManagementPage();
+        return ContentManagementPage(onBack: backToDashboard);
       case 3:
         return const InsightsPage();
       case 4:
-        return const SettingsPage();
+        return SettingsPage(onBack: backToDashboard);
       default:
         return const SizedBox.shrink();
     }
@@ -110,12 +114,22 @@ class _CaregiverBottomNav extends StatelessWidget {
                         child: Icon(t.icon, size: 22, color: AppColors.textPrimary),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        context.tr(t.labelKey),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                          color: AppColors.textPrimary,
+                      // FittedBox shrinks longer labels (e.g. Bahasa "Papan
+                      // Pemuka", "Pengurusan Kandungan") so they fit a single
+                      // line instead of wrapping inside the narrow tab cell.
+                      // Shorter labels render at full size unchanged.
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.center,
+                        child: Text(
+                          context.tr(t.labelKey),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                       ),
                     ],

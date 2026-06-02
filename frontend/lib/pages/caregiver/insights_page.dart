@@ -364,7 +364,9 @@ class _InsightsPageState extends State<InsightsPage> {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 14,
       crossAxisSpacing: 14,
-      childAspectRatio: 1.15,
+      // Squarer cards give the two-line label room to breathe instead of
+      // sitting flush against the bottom border. Lower ratio = more height.
+      childAspectRatio: 0.95,
       children: cards
           .map((s) => StatCard(
                 icon: s.icon,
@@ -1116,6 +1118,61 @@ class _Badge extends StatelessWidget {
 // UC-9: AI listening-behaviour suggestions
 // ============================================================
 
+/// Per-setting icon + tint, so each suggestion tile is visually distinct at a
+/// glance instead of being a wall of grey text.
+class _SettingVisual {
+  final IconData icon;
+  final Color tint;
+  const _SettingVisual(this.icon, this.tint);
+}
+
+_SettingVisual _visualFor(String key) {
+  switch (key) {
+    case 'reading_speed':
+      return const _SettingVisual(Icons.speed_rounded, AppColors.iconCircleBlue);
+    case 'narrator_voice':
+      return const _SettingVisual(
+          Icons.record_voice_over_rounded, AppColors.iconCirclePurple);
+    case 'volume':
+      return const _SettingVisual(Icons.volume_up_rounded, AppColors.iconCircleGreen);
+    case 'text_scale':
+      return const _SettingVisual(Icons.text_fields_rounded, AppColors.iconCirclePeach);
+    case 'reduced_animations':
+      return const _SettingVisual(
+          Icons.motion_photos_pause_rounded, AppColors.softLavender);
+    case 'auto_play_next':
+      return const _SettingVisual(Icons.skip_next_rounded, AppColors.softMint);
+    case 'read_along':
+      return const _SettingVisual(Icons.format_color_text_rounded, AppColors.softPeach);
+    default:
+      return const _SettingVisual(Icons.tune_rounded, AppColors.softLavender);
+  }
+}
+
+/// "5 min ago" style relative time, with the absolute timestamp as the
+/// tooltip — friendlier than a raw timestamp in the footer.
+String _relativeWhen(BuildContext context, DateTime when) {
+  final diff = DateTime.now().difference(when);
+  if (diff.inSeconds < 60) return context.tr('insights.time_just_now');
+  if (diff.inMinutes < 60) {
+    return '${diff.inMinutes} ${context.tr('insights.time_minutes_ago')}';
+  }
+  if (diff.inHours < 24) {
+    return '${diff.inHours} ${context.tr('insights.time_hours_ago')}';
+  }
+  return '${diff.inDays} ${context.tr('insights.time_days_ago')}';
+}
+
+String _absoluteWhen(DateTime when) {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${months[when.month - 1]} ${when.day}, '
+      '${when.hour.toString().padLeft(2, '0')}:'
+      '${when.minute.toString().padLeft(2, '0')}';
+}
+
 /// Renders Gemini's per-child suggestion list with per-item Accept / Edit &
 /// accept / Dismiss actions. Always visible when a child is selected, so the
 /// caregiver has a clear call-to-action ("Run AI analysis") even before the
@@ -1141,46 +1198,23 @@ class _SuggestionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = suggestion;
+    final pendingCount = s == null
+        ? 0
+        : s.items.where((i) => i.isPending).length;
+
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  color: AppColors.iconCirclePurple,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: const Icon(Icons.auto_awesome_rounded,
-                    size: 20, color: AppColors.textPrimary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(context.tr('insights.suggestions_title'),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800, fontSize: 16)),
-                    const SizedBox(height: 2),
-                    Text(
-                      context.tr('insights.suggestions_sub'),
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          _Header(
+            pendingCount: pendingCount,
+            hasItems: s != null && s.items.isNotEmpty,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           if (loading)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 22),
+              padding: EdgeInsets.symmetric(vertical: 28),
               child: Center(child: CircularProgressIndicator()),
             )
           else
@@ -1214,7 +1248,7 @@ class _SuggestionsCard extends StatelessWidget {
           ),
         ],
         if (hasItems) ...[
-          if (s.isStale || s.isLowConfidence) const SizedBox(height: 12),
+          if (s.isStale || s.isLowConfidence) const SizedBox(height: 14),
           for (var i = 0; i < s.items.length; i++) ...[
             _SuggestionTile(
               item: s.items[i],
@@ -1222,25 +1256,156 @@ class _SuggestionsCard extends StatelessWidget {
               onEditAccept: (v) => onEditAccept(s.items[i], v),
               onDismiss: () => onDismiss(s.items[i]),
             ),
-            if (i != s.items.length - 1)
-              const Divider(height: 18, color: AppColors.cardBorder),
+            if (i != s.items.length - 1) const SizedBox(height: 12),
           ],
         ] else ...[
           if (s != null && (s.isStale || s.isLowConfidence))
-            const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 14),
+          _EmptyState(),
+        ],
+        const SizedBox(height: 18),
+        _Footer(
+          generatedAt: s?.generatedAt,
+          analyzing: analyzing,
+          hasItems: hasItems,
+          onRunAnalysis: onRunAnalysis,
+        ),
+      ],
+    );
+  }
+}
+
+/// Top of the suggestions card — gradient AI badge, title, and a pending
+/// count chip so the caregiver can see at a glance how many items need
+/// attention without scrolling.
+class _Header extends StatelessWidget {
+  final int pendingCount;
+  final bool hasItems;
+  const _Header({required this.pendingCount, required this.hasItems});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primaryBlue, AppColors.primaryBlueDark],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryBlue.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: const Icon(Icons.auto_awesome_rounded,
+              size: 22, color: Colors.white),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.tr('insights.suggestions_title'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 17),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                context.tr('insights.suggestions_sub'),
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        if (hasItems) ...[
+          const SizedBox(width: 8),
+          _PendingChip(count: pendingCount),
+        ],
+      ],
+    );
+  }
+}
+
+class _PendingChip extends StatelessWidget {
+  final int count;
+  const _PendingChip({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final allResolved = count == 0;
+    final bg = allResolved
+        ? AppColors.iconCircleGreen
+        : AppColors.softPeach;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            allResolved ? Icons.check_circle_rounded : Icons.fiber_manual_record,
+            size: 10,
+            color: allResolved ? AppColors.success : AppColors.warning,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            allResolved
+                ? context.tr('insights.all_resolved')
+                : '$count ${context.tr(count == 1 ? 'insights.pending_count_one' : 'insights.pending_count_many')}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom of the card — relative-time stamp + prominent Run/Refresh button.
+class _Footer extends StatelessWidget {
+  final DateTime? generatedAt;
+  final bool analyzing;
+  final bool hasItems;
+  final VoidCallback onRunAnalysis;
+  const _Footer({
+    required this.generatedAt,
+    required this.analyzing,
+    required this.hasItems,
+    required this.onRunAnalysis,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (generatedAt != null) ...[
+          Tooltip(
+            message: _absoluteWhen(generatedAt!),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
+                const Icon(Icons.history_rounded,
+                    size: 14, color: AppColors.textSecondary),
+                const SizedBox(width: 4),
                 Text(
-                  context.tr('insights.no_suggestions_title'),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 14),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  context.tr('insights.no_suggestions_body'),
+                  _relativeWhen(context, generatedAt!),
                   style: const TextStyle(
                       color: AppColors.textSecondary, fontSize: 12),
                 ),
@@ -1248,55 +1413,78 @@ class _SuggestionsCard extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            if (s != null && s.generatedAt != null) ...[
-              Icon(Icons.history_rounded,
-                  size: 14, color: AppColors.textSecondary),
-              const SizedBox(width: 4),
-              Text(
-                '${context.tr('insights.suggestions_generated_at')}: '
-                '${_shortWhen(s.generatedAt!)}',
-                style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 11),
-              ),
-            ],
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: analyzing ? null : onRunAnalysis,
-              icon: analyzing
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.refresh_rounded, size: 18),
-              label: Text(analyzing
-                  ? context.tr('insights.analyzing')
-                  : (hasItems
-                      ? context.tr('insights.refresh_analysis')
-                      : context.tr('insights.run_analysis'))),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryBlue,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
+        const Spacer(),
+        FilledButton.icon(
+          onPressed: analyzing ? null : onRunAnalysis,
+          icon: analyzing
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : Icon(
+                  hasItems
+                      ? Icons.refresh_rounded
+                      : Icons.auto_awesome_rounded,
+                  size: 18),
+          label: Text(analyzing
+              ? context.tr('insights.analyzing')
+              : (hasItems
+                  ? context.tr('insights.refresh_analysis')
+                  : context.tr('insights.run_analysis'))),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primaryBlue,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
         ),
       ],
     );
   }
+}
 
-  static String _shortWhen(DateTime when) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${months[when.month - 1]} ${when.day}, '
-        '${when.hour.toString().padLeft(2, '0')}:'
-        '${when.minute.toString().padLeft(2, '0')}';
+/// What the user sees when a child is selected but no analysis has run yet.
+/// A friendly icon + the "Run AI analysis" wording lifts the tone vs. a
+/// plain two-line text empty state.
+class _EmptyState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              color: AppColors.iconCirclePurple,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.auto_awesome_outlined,
+                size: 28, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            context.tr('insights.no_suggestions_title'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontWeight: FontWeight.w700, fontSize: 14),
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              context.tr('insights.no_suggestions_body'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1352,101 +1540,78 @@ class _SuggestionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settingLabel = _settingLabel(context, item.settingKey);
+    final visual = _visualFor(item.settingKey);
+    final settingLabel = context.tr('insights.setting.${item.settingKey}');
     final suggested = _renderValue(context, item.settingKey, item.suggestedValue);
     final current = item.currentValue == null
         ? null
         : _renderValue(context, item.settingKey, item.currentValue);
+    final resolved = !item.isPending;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      settingLabel,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 14),
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        if (current != null)
-                          _ValuePill(
-                            label: context.tr('insights.current_value'),
-                            value: current,
-                            color: AppColors.background,
-                          ),
-                        _ValuePill(
-                          label: context.tr('insights.suggested_value'),
-                          value: suggested,
-                          color: AppColors.iconCircleGreen,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (!item.isPending)
-                _Badge(
-                  label: item.isAccepted
-                      ? context.tr('insights.applied_badge')
-                      : context.tr('insights.dismissed_badge'),
-                  color: item.isAccepted
-                      ? AppColors.iconCircleGreen
-                      : AppColors.softLavender,
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            item.reason,
-            style: const TextStyle(
-                color: AppColors.textSecondary, fontSize: 12),
-          ),
-          if (item.isPending) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
+    // Resolved items fade back so the caregiver's eye lands on what still
+    // needs attention. We render the whole tile in a translucent wrapper.
+    return Opacity(
+      opacity: resolved ? 0.55 : 1.0,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.background.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row: setting icon + name + resolved badge.
+            Row(
               children: [
-                FilledButton.icon(
-                  onPressed: onAccept,
-                  icon: const Icon(Icons.check_rounded, size: 16),
-                  label: Text(context.tr('insights.accept')),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.success,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: visual.tint,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(visual.icon,
+                      size: 18, color: AppColors.textPrimary),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    settingLabel,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 14),
                   ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final newValue = await _openEditor(context);
-                    if (newValue != null) onEditAccept(newValue);
-                  },
-                  icon: const Icon(Icons.edit_rounded, size: 16),
-                  label: Text(context.tr('insights.edit_accept')),
-                ),
-                TextButton.icon(
-                  onPressed: onDismiss,
-                  icon: const Icon(Icons.close_rounded, size: 16),
-                  label: Text(context.tr('insights.dismiss')),
-                ),
+                if (resolved) _StatusBadge(item: item),
               ],
             ),
+            const SizedBox(height: 12),
+            // Now → Suggested comparison.
+            _ValueComparison(
+              currentLabel: context.tr('insights.current_value'),
+              suggestedLabel: context.tr('insights.suggested_value'),
+              current: current,
+              suggested: suggested,
+              tint: visual.tint,
+            ),
+            const SizedBox(height: 12),
+            // Reason — soft callout with a lightbulb on the leading edge.
+            _ReasonCallout(text: item.reason),
+            if (item.isPending) ...[
+              const SizedBox(height: 12),
+              _ActionBar(
+                onAccept: onAccept,
+                onEditAccept: () async {
+                  final newValue = await _openEditor(context);
+                  if (newValue != null) onEditAccept(newValue);
+                },
+                onDismiss: onDismiss,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1456,10 +1621,6 @@ class _SuggestionTile extends StatelessWidget {
       context: context,
       builder: (ctx) => _EditValueDialog(item: item),
     );
-  }
-
-  String _settingLabel(BuildContext context, String key) {
-    return context.tr('insights.setting.$key');
   }
 
   static String _renderValue(BuildContext context, String key, dynamic v) {
@@ -1485,39 +1646,236 @@ class _SuggestionTile extends StatelessWidget {
   }
 }
 
-class _ValuePill extends StatelessWidget {
+/// Side-by-side "Now value → Suggested value" block with a clear arrow
+/// between the two so the direction of the change is unambiguous.
+class _ValueComparison extends StatelessWidget {
+  final String currentLabel;
+  final String suggestedLabel;
+  final String? current;
+  final String suggested;
+  final Color tint;
+  const _ValueComparison({
+    required this.currentLabel,
+    required this.suggestedLabel,
+    required this.current,
+    required this.suggested,
+    required this.tint,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: _ValueBox(
+            label: currentLabel,
+            value: current ?? '—',
+            background: AppColors.surface,
+            faded: true,
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8),
+          child: Icon(Icons.arrow_forward_rounded,
+              size: 18, color: AppColors.textSecondary),
+        ),
+        Expanded(
+          child: _ValueBox(
+            label: suggestedLabel,
+            value: suggested,
+            background: tint,
+            faded: false,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ValueBox extends StatelessWidget {
   final String label;
   final String value;
-  final Color color;
-  const _ValuePill({
+  final Color background;
+  final bool faded;
+  const _ValueBox({
     required this.label,
     required this.value,
-    required this.color,
+    required this.background,
+    required this.faded,
   });
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration:
-          BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
-      child: RichText(
-        text: TextSpan(
-          style: const TextStyle(
-            fontSize: 11,
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 9,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w800,
+              color: faded
+                  ? AppColors.textSecondary
+                  : AppColors.textPrimary.withValues(alpha: 0.8),
+            ),
           ),
-          children: [
-            TextSpan(
-              text: '$label: ',
-              style: const TextStyle(color: AppColors.textSecondary),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: faded ? FontWeight.w700 : FontWeight.w800,
+                fontSize: 15,
+                color: faded ? AppColors.textSecondary : AppColors.textPrimary,
+                decoration:
+                    faded ? TextDecoration.lineThrough : TextDecoration.none,
+                decorationColor: AppColors.textSecondary,
+              ),
             ),
-            TextSpan(
-              text: value,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Quoted callout — soft tint, leading lightbulb, left accent stripe. Makes
+/// Gemini's reasoning feel like a friendly note, not body text.
+class _ReasonCallout extends StatelessWidget {
+  final String text;
+  const _ReasonCallout({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: AppColors.softMint.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(10),
+        border: const Border(
+          left: BorderSide(color: AppColors.success, width: 3),
         ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lightbulb_outline_rounded,
+              size: 16, color: AppColors.success),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textPrimary,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Per-item Accept / Edit & accept / Dismiss row. Accept is the
+/// largest primary-coloured chip; Dismiss is the quietest.
+class _ActionBar extends StatelessWidget {
+  final VoidCallback onAccept;
+  final VoidCallback onEditAccept;
+  final VoidCallback onDismiss;
+  const _ActionBar({
+    required this.onAccept,
+    required this.onEditAccept,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        FilledButton.icon(
+          onPressed: onAccept,
+          icon: const Icon(Icons.check_rounded, size: 16),
+          label: Text(context.tr('insights.accept')),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.success,
+            foregroundColor: Colors.white,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: onEditAccept,
+          icon: const Icon(Icons.tune_rounded, size: 16),
+          label: Text(context.tr('insights.edit_accept')),
+          style: OutlinedButton.styleFrom(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          ),
+        ),
+        TextButton.icon(
+          onPressed: onDismiss,
+          icon: const Icon(Icons.close_rounded, size: 16),
+          label: Text(context.tr('insights.dismiss')),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Coloured pill with a leading icon shown next to a resolved suggestion,
+/// replacing the plain text badge so accepted/dismissed status is visually
+/// distinct at a glance.
+class _StatusBadge extends StatelessWidget {
+  final AiSuggestionItem item;
+  const _StatusBadge({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final accepted = item.isAccepted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: accepted ? AppColors.iconCircleGreen : AppColors.softLavender,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            accepted ? Icons.check_circle_rounded : Icons.cancel_rounded,
+            size: 13,
+            color: accepted ? AppColors.success : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            accepted
+                ? context.tr('insights.applied_badge')
+                : context.tr('insights.dismissed_badge'),
+            style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+                color: AppColors.textPrimary),
+          ),
+        ],
       ),
     );
   }
@@ -1567,11 +1925,11 @@ class _EditValueDialogState extends State<_EditValueDialog> {
   Widget _buildEditor(BuildContext context) {
     switch (widget.item.settingKey) {
       case 'reading_speed':
-        return _slider(0.5, 1.5, 0.05);
+        return _slider(0.5, 2.0, 0.05);
       case 'volume':
         return _slider(0.0, 1.0, 0.05);
       case 'text_scale':
-        return _slider(0.8, 1.6, 0.05);
+        return _slider(0.7, 2.0, 0.05);
       case 'narrator_voice':
         const voices = [
           'calm_female',

@@ -19,7 +19,9 @@ class StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      // Slightly more bottom padding than the sides so the label has visible
+      // breathing room below it instead of touching the card's bottom edge.
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -30,15 +32,15 @@ class StatCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               color: iconBackground,
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 20, color: AppColors.textPrimary),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           // FittedBox shrinks the value to fit the available width so
           // long values (e.g. "5h 12m", "+12%") never overflow the card.
           SizedBox(
@@ -50,7 +52,7 @@ class StatCard extends StatelessWidget {
                 value,
                 maxLines: 1,
                 style: const TextStyle(
-                  fontSize: 28,
+                  fontSize: 26,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                   height: 1.1,
@@ -58,7 +60,7 @@ class StatCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             label,
             maxLines: 2,
@@ -66,7 +68,7 @@ class StatCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary,
-              height: 1.25,
+              height: 1.3,
             ),
           ),
         ],

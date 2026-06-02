@@ -30,7 +30,7 @@ class SettingsController extends ApiController
 
         $validator = Validator::make($request->all(), [
             'narrator_voice'     => 'sometimes|in:' . implode(',', CaregiverSettings::ALLOWED_VOICES),
-            'reading_speed'      => 'sometimes|numeric|min:0.5|max:1.5',
+            'reading_speed'      => 'sometimes|numeric|min:0.5|max:2.0',
             'volume'             => 'sometimes|numeric|min:0|max:1',
             'reduced_animations' => 'sometimes|boolean',
             'auto_play_next'     => 'sometimes|boolean',

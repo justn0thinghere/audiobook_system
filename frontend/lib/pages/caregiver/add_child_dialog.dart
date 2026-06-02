@@ -14,7 +14,12 @@ class _AvatarOption {
 }
 
 class AddChildDialog extends StatefulWidget {
-  const AddChildDialog({super.key});
+  /// When set, the dialog runs in edit mode: title becomes "Edit child",
+  /// the form is pre-filled, and Save calls updateProfile instead of
+  /// addProfile. Pass null (or omit) to add a new child.
+  final ChildProfile? existing;
+
+  const AddChildDialog({super.key, this.existing});
 
   @override
   State<AddChildDialog> createState() => _AddChildDialogState();
@@ -23,8 +28,8 @@ class AddChildDialog extends StatefulWidget {
 class _AddChildDialogState extends State<AddChildDialog> {
   final _nameCtrl = TextEditingController();
   final _ageCtrl = TextEditingController();
-  String _emoji = '🌟';
-  Color _color = AppColors.softPink;
+  late String _emoji;
+  late Color _color;
   bool _saving = false;
 
   final List<_AvatarOption> _avatars = const [
@@ -35,6 +40,23 @@ class _AddChildDialogState extends State<AddChildDialog> {
     _AvatarOption('🐢', AppColors.softMint),
     _AvatarOption('🚀', AppColors.iconCircleBlue),
   ];
+
+  bool get _isEdit => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    if (e != null) {
+      _nameCtrl.text = e.name;
+      _ageCtrl.text = e.age.toString();
+      _emoji = e.avatarEmoji;
+      _color = e.avatarColor;
+    } else {
+      _emoji = '🌟';
+      _color = AppColors.softPink;
+    }
+  }
 
   @override
   void dispose() {
@@ -48,17 +70,26 @@ class _AddChildDialogState extends State<AddChildDialog> {
     final age = int.tryParse(_ageCtrl.text.trim()) ?? 0;
     if (name.isEmpty || age <= 0) return;
     setState(() => _saving = true);
-    final ok = await context.read<ProfilesState>().addProfile(
-          name: name,
-          age: age,
-          avatarEmoji: _emoji,
-          avatarColorHex: ChildProfile.colorToHex(_color),
-          favoriteGenre: 'Fantasy',
-        );
+    final profiles = context.read<ProfilesState>();
+    final ok = _isEdit
+        ? await profiles.updateProfile(
+            widget.existing!.childId,
+            name: name,
+            age: age,
+            avatarEmoji: _emoji,
+            avatarColorHex: ChildProfile.colorToHex(_color),
+          )
+        : await profiles.addProfile(
+            name: name,
+            age: age,
+            avatarEmoji: _emoji,
+            avatarColorHex: ChildProfile.colorToHex(_color),
+            favoriteGenre: 'Fantasy',
+          );
     if (!mounted) return;
     setState(() => _saving = false);
     if (ok) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     } else {
       AppSnackbar.error(context.trRead('add_child.save_error'),
           context: context);
@@ -78,7 +109,8 @@ class _AddChildDialogState extends State<AddChildDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                context.tr('add_child.title'),
+                context.tr(
+                    _isEdit ? 'add_child.edit_title' : 'add_child.title'),
                 style: const TextStyle(
                     fontSize: 22, fontWeight: FontWeight.w700),
               ),

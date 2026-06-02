@@ -42,7 +42,7 @@ class InsightsController extends ApiController
                     return [false, null];
                 }
                 $f = round((float) $v, 2);
-                return $f >= 0.5 && $f <= 1.5 ? [true, $f] : [false, null];
+                return $f >= 0.5 && $f <= 2.0 ? [true, $f] : [false, null];
             },
             'volume' => function ($v): array {
                 if (!is_numeric($v)) {
@@ -56,7 +56,7 @@ class InsightsController extends ApiController
                     return [false, null];
                 }
                 $f = round((float) $v, 2);
-                return $f >= 0.8 && $f <= 1.6 ? [true, $f] : [false, null];
+                return $f >= 0.7 && $f <= 2.0 ? [true, $f] : [false, null];
             },
             'narrator_voice' => function ($v): array {
                 $s = is_string($v) ? trim($v) : '';

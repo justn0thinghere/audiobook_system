@@ -8,6 +8,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/soft_card.dart';
 import '../child/child_shell.dart';
 import 'add_child_dialog.dart';
+import 'child_profile_actions.dart';
 
 class ProfilesPage extends StatelessWidget {
   const ProfilesPage({super.key});
@@ -104,6 +105,8 @@ class ProfilesPage extends StatelessWidget {
                   child: Text(context.tr('profiles.enter'),
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                 ),
+                const SizedBox(width: 8),
+                ChildProfileActionIcons(profile: p),
               ],
             ),
           ),

@@ -78,6 +78,40 @@ class ProfilesState extends ChangeNotifier {
     return false;
   }
 
+  /// Update one or more editable fields on a child profile. Only the fields
+  /// you pass are sent to the backend; unset fields are left alone.
+  Future<bool> updateProfile(
+    String childId, {
+    String? name,
+    int? age,
+    String? avatarEmoji,
+    String? avatarColorHex,
+    String? favoriteGenre,
+  }) async {
+    final patch = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (age != null) 'age': age,
+      if (avatarEmoji != null) 'avatar_emoji': avatarEmoji,
+      if (avatarColorHex != null) 'avatar_color': avatarColorHex,
+      if (favoriteGenre != null) 'favorite_genre': favoriteGenre,
+    };
+    if (patch.isEmpty) return true;
+    final resp = await DatabaseService.updateChildProfile(childId, patch);
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      final updated = ChildProfile.fromJson(resp.data as Map<String, dynamic>);
+      _profiles = [
+        for (final p in _profiles) p.childId == childId ? updated : p,
+      ];
+      if (_activeProfile?.childId == childId) _activeProfile = updated;
+      _lastError = null;
+      notifyListeners();
+      return true;
+    }
+    _lastError = resp.message;
+    notifyListeners();
+    return false;
+  }
+
   Future<bool> deleteProfile(String childId) async {
     final resp = await DatabaseService.deleteChildProfile(childId);
     if (resp.success) {

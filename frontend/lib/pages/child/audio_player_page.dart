@@ -97,10 +97,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   List<_WordSpan> _wordSpans = const [];
   String _narrationText = ''; // text of the page currently being narrated
 
-  // In preview mode the player keeps its own local UserSettings so the
-  // caregiver can try out voice / speed / text size for this preview only,
-  // without touching any child's stored settings.
-  UserSettings? _previewSettings;
+  // Settings are local to this player session — child changes in here don't
+  // persist back to the child's stored settings (those belong to the
+  // caregiver to manage via the Settings tab). For preview mode it starts at
+  // defaults; for child mode it starts from the caregiver's stored values so
+  // the first playback respects what they chose.
+  UserSettings? _localSettings;
 
   static const _defaultStoryText =
       'A gentle dragon lives in a quiet meadow where every day feels warm and safe. '
@@ -114,9 +116,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.previewMode) {
-      _previewSettings = const UserSettings();
-    }
+    // Preview mode starts fresh; child mode starts from whatever the caregiver
+    // has configured for this child (read from SettingsState once — we don't
+    // watch, because in-player tweaks shouldn't bleed back out).
+    _localSettings = widget.previewMode
+        ? const UserSettings()
+        : context.read<SettingsState>().settings;
     _loadAudiobook();
     // One listener for playback completion (narration OR a real audio file).
     _audioCompleteSub = _engine.onComplete.listen((_) {
@@ -157,33 +162,23 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     super.dispose();
   }
 
-  /// The active settings — preview-local in preview mode, otherwise the
-  /// signed-in child's stored settings. The two helpers exist because reading
-  /// in build needs `watch` (for rebuilds) and reading outside build needs
-  /// `read` (to avoid creating spurious subscriptions).
-  UserSettings _watchSettings() => widget.previewMode
-      ? (_previewSettings ?? const UserSettings())
-      : context.watch<SettingsState>().settings;
+  /// The active settings — always the player-local copy. Child changes here
+  /// stay session-only (UC: "If the child changes settings inside the audio
+  /// playback page, do not also update that setting in the overall settings
+  /// for that child"). Both helpers return the same value; the names are kept
+  /// for callsite clarity (build vs. non-build).
+  UserSettings _watchSettings() => _localSettings ?? const UserSettings();
 
-  UserSettings _readSettings() => widget.previewMode
-      ? (_previewSettings ?? const UserSettings())
-      : context.read<SettingsState>().settings;
+  UserSettings _readSettings() => _localSettings ?? const UserSettings();
 
-  /// Apply a settings change — to the preview-local copy in preview mode,
-  /// or to the active child's stored settings otherwise.
+  /// Apply a settings change to the player-local copy only. We deliberately
+  /// don't propagate this to SettingsState — the caregiver's chosen settings
+  /// for this child must not be overwritten by the child tapping a chip in
+  /// the player.
   void _applySettingsChange(UserSettings Function(UserSettings) update) {
-    if (widget.previewMode) {
-      setState(() {
-        _previewSettings = update(_previewSettings ?? const UserSettings());
-      });
-    } else {
-      final s = context.read<SettingsState>();
-      // Each setter on SettingsState patches one field; mirror that here.
-      final next = update(s.settings);
-      if (next.narratorVoice != s.voice) s.setVoice(next.narratorVoice);
-      if (next.readingSpeed != s.readingSpeed) s.setReadingSpeed(next.readingSpeed);
-      if (next.textScale != s.textScale) s.setTextScale(next.textScale);
-    }
+    setState(() {
+      _localSettings = update(_localSettings ?? const UserSettings());
+    });
   }
 
   /// Persists the just-finished listening session. Fire-and-forget — safe to
@@ -1127,10 +1122,10 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
               inactiveTrackColor: AppColors.cardBorder,
             ),
             child: Slider(
-              value: speed,
-              min: 0.7,
-              max: 1.4,
-              divisions: 7,
+              value: speed.clamp(0.5, 2.0),
+              min: 0.5,
+              max: 2.0,
+              divisions: 15,
               label: '${speed.toStringAsFixed(1)}x',
               onChanged: (value) async {
                 _applySettingsChange((s) => s.copyWith(readingSpeed: value));
@@ -1174,10 +1169,10 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
               inactiveTrackColor: AppColors.cardBorder,
             ),
             child: Slider(
-              value: textScale,
-              min: 0.8,
-              max: 1.6,
-              divisions: 8,
+              value: textScale.clamp(0.7, 2.0),
+              min: 0.7,
+              max: 2.0,
+              divisions: 13,
               label: '${(textScale * 100).round()}%',
               onChanged: (value) =>
                   _applySettingsChange((s) => s.copyWith(textScale: value)),
@@ -1455,14 +1450,14 @@ class _StorybookPage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: _HighlightedText(
-                text: text,
-                highlightStart: highlightStart,
-                highlightEnd: highlightEnd,
-                textScale: textScale,
-              ),
+            // _HighlightedText owns its own ScrollController so it can keep
+            // the currently-narrated word in view automatically — wrapping it
+            // in another SingleChildScrollView here would defeat that.
+            child: _HighlightedText(
+              text: text,
+              highlightStart: highlightStart,
+              highlightEnd: highlightEnd,
+              textScale: textScale,
             ),
           ),
         ],
@@ -1533,7 +1528,12 @@ class _Illustration extends StatelessWidget {
   }
 }
 
-class _HighlightedText extends StatelessWidget {
+/// Page text with karaoke-style word highlighting that auto-scrolls to keep
+/// the spoken word in view. When the narrator's position moves past the
+/// bottom of the visible region (or back above the top after a page turn),
+/// the scroll view animates so the highlight sits in the upper third of the
+/// viewport — the child doesn't have to scroll manually to follow along.
+class _HighlightedText extends StatefulWidget {
   final String text;
   final int highlightStart;
   final int highlightEnd;
@@ -1547,42 +1547,126 @@ class _HighlightedText extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final baseStyle = TextStyle(
-      fontSize: 20 * textScale,
-      height: 1.7,
-      color: AppColors.textPrimary,
-      fontWeight: FontWeight.w500,
-      letterSpacing: 0.2,
-    );
+  State<_HighlightedText> createState() => _HighlightedTextState();
+}
 
-    final valid = highlightEnd > highlightStart &&
-        highlightStart >= 0 &&
-        highlightEnd <= text.length;
+class _HighlightedTextState extends State<_HighlightedText> {
+  final ScrollController _scroll = ScrollController();
+  final GlobalKey _textKey = GlobalKey();
 
-    if (!valid) {
-      return Text(text, style: baseStyle);
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HighlightedText old) {
+    super.didUpdateWidget(old);
+    // When the page text itself changes (page-turn), snap back to the top so
+    // the next page starts at the beginning instead of inheriting the
+    // previous scroll offset.
+    if (widget.text != old.text) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) _scroll.jumpTo(0);
+      });
+      return;
     }
+    if (widget.highlightStart != old.highlightStart ||
+        widget.highlightEnd != old.highlightEnd) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ensureHighlightVisible();
+      });
+    }
+  }
 
-    // Highlight the spoken word with a soft box behind it (clearer to follow
-    // than just colouring the text).
-    final highlightStyle = baseStyle.copyWith(
+  /// If the highlighted word is outside the viewport (or close to its edge),
+  /// animate the scroll so it sits ~30% from the top — leaves room above for
+  /// the child to glance back at the words they've heard, and room below for
+  /// the next words coming up.
+  void _ensureHighlightVisible() {
+    if (!mounted || !_scroll.hasClients) return;
+    final ctx = _textKey.currentContext;
+    if (ctx == null) return;
+    final renderBox = ctx.findRenderObject() as RenderBox?;
+    if (renderBox == null || renderBox.size.width <= 0) return;
+
+    final start = widget.highlightStart;
+    final end = widget.highlightEnd;
+    if (end <= start || start < 0 || end > widget.text.length) return;
+
+    // Lay out the same TextSpan we render so the offsets line up exactly
+    // (the highlighted span is bolder, which subtly shifts line breaks).
+    final painter = TextPainter(
+      text: _buildSpan(),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: renderBox.size.width);
+    final caret = painter.getOffsetForCaret(
+      TextPosition(offset: start),
+      Rect.zero,
+    );
+    final wordTopY = caret.dy;
+
+    final viewport = _scroll.position.viewportDimension;
+    final maxScroll = _scroll.position.maxScrollExtent;
+    final current = _scroll.position.pixels;
+    if (maxScroll <= 0) return;
+
+    final desired = (wordTopY - viewport * 0.3).clamp(0.0, maxScroll);
+    // Already roughly where we want to be — skip the animation so a flurry
+    // of position events doesn't churn the scroll position.
+    if ((desired - current).abs() < 8) return;
+
+    _scroll.animateTo(
+      desired,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  TextStyle get _baseStyle => TextStyle(
+        fontSize: 20 * widget.textScale,
+        height: 1.7,
+        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.2,
+      );
+
+  TextSpan _buildSpan() {
+    final base = _baseStyle;
+    final start = widget.highlightStart;
+    final end = widget.highlightEnd;
+    final valid =
+        end > start && start >= 0 && end <= widget.text.length;
+    if (!valid) {
+      return TextSpan(text: widget.text, style: base);
+    }
+    final highlightStyle = base.copyWith(
       fontWeight: FontWeight.w800,
       color: AppColors.textPrimary,
       background: Paint()..color = AppColors.softYellow,
     );
+    return TextSpan(
+      style: base,
+      children: [
+        TextSpan(text: widget.text.substring(0, start)),
+        TextSpan(
+          text: widget.text.substring(start, end),
+          style: highlightStyle,
+        ),
+        TextSpan(text: widget.text.substring(end)),
+      ],
+    );
+  }
 
-    return RichText(
-      text: TextSpan(
-        style: baseStyle,
-        children: [
-          TextSpan(text: text.substring(0, highlightStart)),
-          TextSpan(
-            text: text.substring(highlightStart, highlightEnd),
-            style: highlightStyle,
-          ),
-          TextSpan(text: text.substring(highlightEnd)),
-        ],
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _scroll,
+      physics: const BouncingScrollPhysics(),
+      child: RichText(
+        key: _textKey,
+        text: _buildSpan(),
       ),
     );
   }

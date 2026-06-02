@@ -17,7 +17,12 @@ import '../child/audio_player_page.dart';
 import 'upload_content_page.dart';
 
 class ContentManagementPage extends StatefulWidget {
-  const ContentManagementPage({super.key});
+  /// Called when the back arrow in the page header is tapped. The shell uses
+  /// this to switch back to the Dashboard tab — pop() doesn't work here
+  /// because the page is rendered inside the shell's tab body, not pushed
+  /// onto the navigator.
+  final VoidCallback? onBack;
+  const ContentManagementPage({super.key, this.onBack});
 
   @override
   State<ContentManagementPage> createState() => _ContentManagementPageState();
@@ -119,7 +124,10 @@ class _ContentManagementPageState extends State<ContentManagementPage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
-          BackPill(label: 'Back to Dashboard', onTap: () => Navigator.of(context).maybePop()),
+          BackPill(
+            label: 'Back to Dashboard',
+            onTap: widget.onBack ?? () => Navigator.of(context).maybePop(),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [

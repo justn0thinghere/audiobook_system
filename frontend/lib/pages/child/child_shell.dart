@@ -44,7 +44,9 @@ class _ChildShellState extends State<ChildShell> {
       case 0:
         return const ChildHomePage();
       case 1:
-        return const StoryLibraryPage();
+        // Back arrow on the Library tab goes back to Home; pop() can't do it
+        // because the Library is rendered as a tab body, not pushed.
+        return StoryLibraryPage(onBack: () => setState(() => _index = 0));
       default:
         return const SizedBox.shrink();
     }
@@ -119,12 +121,18 @@ class _ChildBottomNav extends StatelessWidget {
                         child: Icon(t.icon, size: 24, color: AppColors.textPrimary),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        t.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                          color: AppColors.textPrimary,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.center,
+                        child: Text(
+                          t.label,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                       ),
                     ],

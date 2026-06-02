@@ -14,7 +14,12 @@ import '../../widgets/back_pill.dart';
 import '../../widgets/soft_card.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  /// Called when the back arrow in the page header is tapped. The shell uses
+  /// this to switch back to the Dashboard tab — pop() doesn't work here
+  /// because the page is rendered inside the shell's tab body, not pushed
+  /// onto the navigator.
+  final VoidCallback? onBack;
+  const SettingsPage({super.key, this.onBack});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -42,7 +47,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       children: [
-        BackPill(onTap: () => Navigator.of(context).maybePop()),
+        BackPill(onTap: widget.onBack ?? () => Navigator.of(context).maybePop()),
         const SizedBox(height: 16),
         Text(
           context.tr('settings.title'),
@@ -250,8 +255,10 @@ class _NarrationCard extends StatelessWidget {
             ],
           ),
           Slider(
-            value: settings.readingSpeed,
-            min: 0.5, max: 1.5, divisions: 10,
+            value: settings.readingSpeed.clamp(0.5, 2.0),
+            min: 0.5,
+            max: 2.0,
+            divisions: 15,
             activeColor: AppColors.primaryBlueDark,
             inactiveColor: AppColors.cardBorder,
             onChanged: settings.setReadingSpeed,
@@ -415,10 +422,10 @@ class _TextSizeCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Slider(
-            value: scale,
-            min: 0.8,
-            max: 1.6,
-            divisions: 8,
+            value: scale.clamp(0.7, 2.0),
+            min: 0.7,
+            max: 2.0,
+            divisions: 13,
             label: '${(scale * 100).round()}%',
             activeColor: AppColors.primaryBlueDark,
             inactiveColor: AppColors.cardBorder,

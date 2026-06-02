@@ -112,6 +112,9 @@ class AppStrings {
     'profiles.years_old': 'years old',
     'profiles.enter': 'Enter',
     'profiles.minutes_listened': 'min listened',
+    'profiles.edit_label': 'Edit profile',
+    'profiles.remove_label': 'Remove profile',
+    'profiles.remove_button': 'Remove',
 
     // Add child dialog
     'add_child.title': 'Add Child',
@@ -369,6 +372,13 @@ class AppStrings {
     'insights.setting.read_along': 'Read-along highlight',
     'insights.bool_on': 'On',
     'insights.bool_off': 'Off',
+    'insights.pending_count_one': 'pending',
+    'insights.pending_count_many': 'pending',
+    'insights.all_resolved': 'All resolved',
+    'insights.time_just_now': 'just now',
+    'insights.time_minutes_ago': 'min ago',
+    'insights.time_hours_ago': 'h ago',
+    'insights.time_days_ago': 'd ago',
   };
 
   // ---------------- BAHASA MALAYSIA ----------------
@@ -462,6 +472,9 @@ class AppStrings {
     'profiles.years_old': 'tahun',
     'profiles.enter': 'Masuk',
     'profiles.minutes_listened': 'min didengar',
+    'profiles.edit_label': 'Sunting profil',
+    'profiles.remove_label': 'Buang profil',
+    'profiles.remove_button': 'Buang',
 
     // Add child dialog
     'add_child.title': 'Tambah Kanak-kanak',
@@ -723,5 +736,12 @@ class AppStrings {
     'insights.setting.read_along': 'Sorotan baca bersama',
     'insights.bool_on': 'Hidup',
     'insights.bool_off': 'Mati',
+    'insights.pending_count_one': 'tertangguh',
+    'insights.pending_count_many': 'tertangguh',
+    'insights.all_resolved': 'Semua diselesaikan',
+    'insights.time_just_now': 'baru sahaja',
+    'insights.time_minutes_ago': 'min lalu',
+    'insights.time_hours_ago': 'jam lalu',
+    'insights.time_days_ago': 'hari lalu',
   };
 }

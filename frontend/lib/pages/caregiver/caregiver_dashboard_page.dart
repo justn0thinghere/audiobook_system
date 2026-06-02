@@ -13,6 +13,7 @@ import '../../widgets/stat_card.dart';
 import '../shared/auth_gate.dart';
 import '../child/child_shell.dart';
 import 'add_child_dialog.dart';
+import 'child_profile_actions.dart';
 
 class CaregiverDashboardPage extends StatelessWidget {
   final ValueChanged<int>? onJumpToTab;
@@ -82,7 +83,9 @@ class CaregiverDashboardPage extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 14,
           crossAxisSpacing: 14,
-          childAspectRatio: 1.05,
+          // Slightly taller than wide so the two-line label has visible space
+          // below it (the bigger ratio was clipping the bottom of the label).
+          childAspectRatio: 0.98,
           children: [
             StatCard(
               icon: Icons.people_outline,
@@ -227,15 +230,7 @@ class _ChildProfileCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.iconCircleBlue,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.edit_outlined, size: 18, color: AppColors.textPrimary),
-              ),
+              ChildProfileActionIcons(profile: profile),
             ],
           ),
           const SizedBox(height: 14),
