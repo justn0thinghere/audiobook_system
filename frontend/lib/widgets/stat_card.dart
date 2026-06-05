@@ -19,28 +19,29 @@ class StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Slightly more bottom padding than the sides so the label has visible
-      // breathing room below it instead of touching the card's bottom edge.
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.cardBorder),
       ),
+      // Label sits right under the value (start alignment + min size). Pages
+      // using this widget keep labels uniform (all 1-line or all 2-line) so
+      // the grid's fixed-height cells don't leave dead space at the bottom.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: iconBackground,
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 20, color: AppColors.textPrimary),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           // FittedBox shrinks the value to fit the available width so
           // long values (e.g. "5h 12m", "+12%") never overflow the card.
           SizedBox(
@@ -52,7 +53,7 @@ class StatCard extends StatelessWidget {
                 value,
                 maxLines: 1,
                 style: const TextStyle(
-                  fontSize: 26,
+                  fontSize: 28,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                   height: 1.1,
@@ -60,7 +61,7 @@ class StatCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             label,
             maxLines: 2,
@@ -68,7 +69,7 @@ class StatCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary,
-              height: 1.3,
+              height: 1.25,
             ),
           ),
         ],

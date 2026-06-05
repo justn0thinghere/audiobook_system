@@ -48,8 +48,8 @@ class AudiobookApp extends StatelessWidget {
   }
 }
 
-/// Reacts to AuthState changes — when the caregiver signs in, hydrate
-/// profiles + settings from the API; on sign-out, clear them.
+// Reacts to AuthState changes — when the caregiver signs in, hydrate
+// profiles + settings from the API; on sign-out, clear them.
 class _SessionScopedLoader extends StatefulWidget {
   const _SessionScopedLoader();
 

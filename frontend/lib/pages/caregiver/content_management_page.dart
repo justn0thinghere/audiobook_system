@@ -10,10 +10,10 @@ import '../../services/database_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/back_pill.dart';
-import '../../widgets/soft_card.dart';
 import '../../widgets/soft_chip.dart';
 import '../../widgets/stat_card.dart';
 import '../child/audio_player_page.dart';
+import 'edit_content_page.dart';
 import 'upload_content_page.dart';
 
 class ContentManagementPage extends StatefulWidget {
@@ -76,6 +76,58 @@ class _ContentManagementPageState extends State<ContentManagementPage> {
       _loading = false;
     });
     _syncPolling();
+  }
+
+  Future<void> _editItem(ContentItem item) async {
+    final id = item.audiobookId;
+    if (id == null || id.isEmpty) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EditContentPage(audiobookId: id)),
+    );
+    // Always refresh on return — the caregiver may have edited the title,
+    // pages, or images, all of which surface in the list tile.
+    if (mounted) await _refresh(silent: true);
+  }
+
+  Future<void> _deleteItem(ContentItem item) async {
+    final id = item.audiobookId;
+    if (id == null || id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(ctx.tr('content.delete_confirm')),
+        content: Text(
+          ctx.tr('content.delete_confirm_body'),
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(ctx.tr('common.cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(ctx.tr('content.delete_button')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final resp = await DatabaseService.deleteContent(id);
+    if (!mounted) return;
+    if (resp.success) {
+      await _refresh(silent: true);
+    } else {
+      AppSnackbar.error(
+        '${context.trRead('content.delete_error')}: ${resp.message}',
+        context: context,
+      );
+    }
   }
 
   /// Open the audiobook in the same player the child uses, so the caregiver
@@ -271,7 +323,12 @@ class _ContentManagementPageState extends State<ContentManagementPage> {
             )
           else
             for (final item in _items) ...[
-              _ContentTile(item: item, onTap: () => _openPreview(item)),
+              _ContentTile(
+                item: item,
+                onTap: () => _openPreview(item),
+                onEdit: () => _editItem(item),
+                onDelete: () => _deleteItem(item),
+              ),
               const SizedBox(height: 10),
             ],
         ],
@@ -283,7 +340,14 @@ class _ContentManagementPageState extends State<ContentManagementPage> {
 class _ContentTile extends StatelessWidget {
   final ContentItem item;
   final VoidCallback? onTap;
-  const _ContentTile({required this.item, this.onTap});
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  const _ContentTile({
+    required this.item,
+    this.onTap,
+    this.onEdit,
+    this.onDelete,
+  });
 
   static ({IconData icon, Color bg, String label}) _typeMetaFor(ContentItem item) {
     if (item.isGenerated) {
@@ -300,56 +364,137 @@ class _ContentTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final meta = _typeMetaFor(item);
     final processing = item.status == 'processing';
-    return SoftCard(
-      onTap: onTap,
+    final showMenu =
+        !processing && (onEdit != null || onDelete != null);
+    // Resolve menu labels here in the widget tree's build context.
+    // PopupMenuButton's itemBuilder runs lazily in an Overlay route, where
+    // calling `ctx.tr(...)` (which uses watch<LanguageState>) throws
+    // "Tried to listen to a value exposed with provider, from outside of
+    // the widget tree" and silently aborts the menu before it can open.
+    final editLabel = context.tr('content.edit_label');
+    final deleteLabel = context.tr('content.delete_label');
+    final tapToPreviewLabel = context.tr('content.tap_to_preview');
+
+    // Material gives us a single surface for both the ink ripple and the
+    // popup menu's overlay positioning. InkWell wraps ONLY the left preview
+    // area (so it can't capture taps meant for the menu). The popup menu
+    // sits as a sibling Row child — same card surface, separate hit area.
+    return Material(
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.cardBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Row(
         children: [
-          _Thumbnail(
-            imageUrl: item.coverImage,
-            meta: meta,
-            processing: processing,
-          ),
-          const SizedBox(width: 14),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item.title,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700)),
-                if (item.topic != null || item.difficulty != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      [item.topic, item.difficulty].whereType<String>().join(' • '),
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 13),
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(18, 18, showMenu ? 4 : 18, 18),
+                child: Row(
+                  children: [
+                    _Thumbnail(
+                      imageUrl: item.coverImage,
+                      meta: meta,
+                      processing: processing,
                     ),
-                  ),
-                if (!processing)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.play_circle_outline,
-                            size: 15, color: AppColors.primaryBlueDark),
-                        const SizedBox(width: 4),
-                        Text(
-                          context.tr('content.tap_to_preview'),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primaryBlueDark,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.title,
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w700)),
+                          if (item.topic != null || item.difficulty != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                [item.topic, item.difficulty]
+                                    .whereType<String>()
+                                    .join(' • '),
+                                style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 13),
+                              ),
+                            ),
+                          if (!processing)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.play_circle_outline,
+                                      size: 15,
+                                      color: AppColors.primaryBlueDark),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    tapToPreviewLabel,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primaryBlueDark,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-              ],
+                    processing ? _generatingBadge(context) : _typeBadge(meta),
+                  ],
+                ),
+              ),
             ),
           ),
-          processing ? _generatingBadge(context) : _typeBadge(meta),
+          if (showMenu)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: PopupMenuButton<String>(
+                tooltip: '',
+                icon: const Icon(Icons.more_vert_rounded,
+                    color: AppColors.textSecondary),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                onSelected: (action) {
+                  if (action == 'edit') {
+                    onEdit?.call();
+                  } else if (action == 'delete') {
+                    onDelete?.call();
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (onEdit != null)
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.edit_rounded, size: 18),
+                          const SizedBox(width: 10),
+                          Text(editLabel),
+                        ],
+                      ),
+                    ),
+                  if (onDelete != null)
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.delete_outline_rounded,
+                              size: 18, color: AppColors.danger),
+                          const SizedBox(width: 10),
+                          Text(deleteLabel,
+                              style:
+                                  const TextStyle(color: AppColors.danger)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -471,3 +616,4 @@ class _Thumbnail extends StatelessWidget {
     );
   }
 }
+

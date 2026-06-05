@@ -364,9 +364,9 @@ class _InsightsPageState extends State<InsightsPage> {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 14,
       crossAxisSpacing: 14,
-      // Squarer cards give the two-line label room to breathe instead of
-      // sitting flush against the bottom border. Lower ratio = more height.
-      childAspectRatio: 0.95,
+      // Just shy of square — enough vertical room for the two-line labels
+      // without leaving empty space beneath them.
+      childAspectRatio: 1.05,
       children: cards
           .map((s) => StatCard(
                 icon: s.icon,

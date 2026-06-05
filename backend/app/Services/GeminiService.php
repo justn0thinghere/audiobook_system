@@ -188,13 +188,13 @@ STATS (JSON):
 Rules:
 - Only suggest changes to known settings. Allowed setting_key values are
   exactly: "reading_speed", "narrator_voice", "volume", "text_scale",
-  "reduced_animations", "auto_play_next", "read_along".
+  "auto_play_next", "read_along".
 - For reading_speed: a number between 0.5 and 2.0 (step 0.05).
 - For narrator_voice: one of "calm_female", "gentle_female", "warm_male",
   "friendly_child", "soothing_elder".
 - For volume: a number between 0.0 and 1.0 (step 0.05).
 - For text_scale: a number between 0.7 and 2.0 (step 0.05).
-- For reduced_animations, auto_play_next, read_along: true or false.
+- For auto_play_next, read_along: true or false.
 - Each item's "reason" must be one short, plain sentence a caregiver can read
   in a glance. No clinical claims, no jargon. Reference the specific stat you
   used (e.g. "Pause rate is high (3.4 per session)…").

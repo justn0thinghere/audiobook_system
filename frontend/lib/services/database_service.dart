@@ -381,6 +381,96 @@ class DatabaseService {
     return _post('/content/create', body: payload);
   }
 
+  /// Update editable text fields on an audiobook (title, description,
+  /// language, etc.). Only the keys you pass are sent to the backend;
+  /// missing keys are left alone.
+  static Future<ApiResponse> updateContent(
+    String audiobookId,
+    Map<String, dynamic> patch,
+  ) async {
+    final resp = await _post('/content/$audiobookId/update', body: patch);
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      return ApiResponse(
+        success: true,
+        message: resp.message,
+        data: ContentItem.fromJson(resp.data as Map<String, dynamic>),
+      );
+    }
+    return resp;
+  }
+
+  /// Delete an audiobook. Cascades to its pages and listening history
+  /// automatically via the schema's ON DELETE CASCADE.
+  static Future<ApiResponse> deleteContent(String audiobookId) {
+    return _post('/content/$audiobookId/delete');
+  }
+
+  /// Update a single page on an existing audiobook. [imagePath] is optional
+  /// — when omitted the existing image is left in place; when provided it
+  /// replaces the current image via multipart upload.
+  static Future<ApiResponse> updateAudiobookPage({
+    required String audiobookId,
+    required String pageId,
+    String? text,
+    int? pageNumber,
+    int? audioStartMs,
+    String? imagePath,
+  }) async {
+    if (!await _hasNetworkConnection()) {
+      return ApiResponse.failure(
+        'No internet connection. Please check your network settings.',
+        error: 'NO_CONNECTIVITY',
+      );
+    }
+    try {
+      final token = await _currentToken();
+      if (token == null || token.isEmpty) {
+        return ApiResponse.failure('Not signed in', error: 'NO_SESSION');
+      }
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/content/$audiobookId/pages/$pageId/update'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+      if (text != null) request.fields['text'] = text;
+      if (pageNumber != null) request.fields['page_number'] = '$pageNumber';
+      if (audioStartMs != null) {
+        request.fields['audio_start_ms'] = '$audioStartMs';
+      }
+      if (imagePath != null && imagePath.isNotEmpty) {
+        request.files
+            .add(await http.MultipartFile.fromPath('image', imagePath));
+      }
+
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamed);
+      if (response.body.isEmpty) {
+        return ApiResponse.failure('Empty response', error: 'EMPTY_BODY');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return ApiResponse.failure('Unexpected response shape',
+            error: 'BAD_SHAPE');
+      }
+      return ApiResponse.fromBackend(decoded);
+    } on TimeoutException {
+      return ApiResponse.failure('Upload timed out', error: 'TIMEOUT');
+    } catch (e) {
+      return ApiResponse.failure('Upload failed: $e', error: 'UNKNOWN');
+    }
+  }
+
+  /// Delete a single page from an audiobook.
+  static Future<ApiResponse> deleteAudiobookPage({
+    required String audiobookId,
+    required String pageId,
+  }) {
+    return _post('/content/$audiobookId/pages/$pageId/delete');
+  }
+
   /// Create an audiobook with an optional cover-image file (multipart).
   /// Returns the created ContentItem (with its audiobook_id) on success.
   static Future<ApiResponse> createContentWithCover({

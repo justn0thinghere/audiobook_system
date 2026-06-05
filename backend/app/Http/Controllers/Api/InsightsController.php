@@ -64,7 +64,6 @@ class InsightsController extends ApiController
                     ? [true, $s]
                     : [false, null];
             },
-            'reduced_animations' => fn ($v) => [true, $this->coerceBool($v)],
             'auto_play_next'     => fn ($v) => [true, $this->coerceBool($v)],
             'read_along'         => fn ($v) => [true, $this->coerceBool($v)],
         ];

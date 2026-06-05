@@ -337,16 +337,6 @@ class _SensoryCard extends StatelessWidget {
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             activeThumbColor: AppColors.primaryBlueDark,
-            value: settings.reducedAnimations,
-            onChanged: settings.setReducedAnimations,
-            title: Text(context.tr('settings.reduced_animations'),
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(context.tr('settings.reduced_animations_sub'),
-                style: const TextStyle(color: AppColors.textSecondary)),
-          ),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            activeThumbColor: AppColors.primaryBlueDark,
             value: settings.autoPlayNext,
             onChanged: settings.setAutoPlayNext,
             title: Text(context.tr('settings.auto_play_next'),

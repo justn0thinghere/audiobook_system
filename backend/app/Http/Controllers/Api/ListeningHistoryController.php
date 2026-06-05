@@ -17,6 +17,7 @@ class ListeningHistoryController extends ApiController
             'audiobook_id'     => $request->input('audiobook_id'),
             'duration_seconds' => $request->input('duration_seconds'),
             'completed'        => $request->input('completed'),
+            'mood'             => $request->input('mood'),
             'pause_count'      => $request->input('pause_count'),
             'skip_count'       => $request->input('skip_count'),
         ]);
@@ -59,6 +60,7 @@ class ListeningHistoryController extends ApiController
         $this->logEvent('History', 'record success', [
             'history_id'  => $history->history_id,
             'child_id'    => $history->child_id,
+            'mood'        => $history->mood,
             'pause_count' => (int) $history->pause_count,
             'skip_count'  => (int) $history->skip_count,
         ]);

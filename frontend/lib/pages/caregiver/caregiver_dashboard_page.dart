@@ -83,9 +83,9 @@ class CaregiverDashboardPage extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 14,
           crossAxisSpacing: 14,
-          // Slightly taller than wide so the two-line label has visible space
-          // below it (the bigger ratio was clipping the bottom of the label).
-          childAspectRatio: 0.98,
+          // Just shy of square — fits the two-line labels without leaving
+          // empty space underneath.
+          childAspectRatio: 1.05,
           children: [
             StatCard(
               icon: Icons.people_outline,

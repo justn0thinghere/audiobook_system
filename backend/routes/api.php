@@ -57,7 +57,11 @@ Route::middleware('session.auth')->group(function () {
         Route::post('/list',     [ContentManagementController::class, 'getContentList']);
         Route::post('/create',   [ContentManagementController::class, 'createContent']);
         Route::post('/generate', [ContentManagementController::class, 'generateContent']);
-        Route::post('/{audiobookId}/pages', [ContentManagementController::class, 'addPage'])->whereUuid('audiobookId');
+        Route::post('/{audiobookId}/pages',  [ContentManagementController::class, 'addPage'])->whereUuid('audiobookId');
+        Route::post('/{audiobookId}/update', [ContentManagementController::class, 'update'])->whereUuid('audiobookId');
+        Route::post('/{audiobookId}/delete', [ContentManagementController::class, 'destroy'])->whereUuid('audiobookId');
+        Route::post('/{audiobookId}/pages/{pageId}/update', [ContentManagementController::class, 'updatePage'])->whereUuid(['audiobookId', 'pageId']);
+        Route::post('/{audiobookId}/pages/{pageId}/delete', [ContentManagementController::class, 'deletePage'])->whereUuid(['audiobookId', 'pageId']);
     });
 
     Route::prefix('listening-history')->group(function () {

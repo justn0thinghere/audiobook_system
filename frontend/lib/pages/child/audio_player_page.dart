@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -879,7 +878,6 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
 
   Widget _buildStorybook() {
     final settings = _watchSettings();
-    final reduced = settings.reducedAnimations;
     final readAlongEnabled = settings.readAlong;
     final textScale = settings.textScale;
     return Container(
@@ -934,68 +932,14 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                   author: _audiobook?.author,
                   textScale: textScale,
                 );
-                if (reduced) return page;
-                return AnimatedBuilder(
-                  animation: _pageController,
-                  child: page,
-                  builder: (context, child) {
-                    double offset = 0;
-                    if (_pageController.positions.isNotEmpty &&
-                        _pageController.position.hasContentDimensions) {
-                      offset = index - (_pageController.page ?? 0);
-                    } else {
-                      offset = (index - _page).toDouble();
-                    }
-                    final clamped = offset.clamp(-1.0, 1.0);
-                    // |t|: 0 = facing camera, 1 = swung edge-on against the spine.
-                    final t = clamped.abs();
-                    // Stop just shy of 90° so the page never shows its back.
-                    final rotation = clamped * (math.pi / 2.05);
-                    // Outgoing pages (clamped<0) pivot at the right edge of the
-                    // page, incoming pages (clamped>0) at the left — both swing
-                    // around the book's spine.
-                    final alignment = clamped >= 0
-                        ? Alignment.centerLeft
-                        : Alignment.centerRight;
-                    // Spine shadow: a soft darkening from the binding edge
-                    // outward that deepens as the page tilts, mimicking the
-                    // shadow a real page casts on itself near the spine.
-                    final shadowFromLeft = clamped >= 0;
-                    return Transform(
-                      alignment: alignment,
-                      transform: Matrix4.identity()
-                        // Stronger perspective sells the depth of a real book.
-                        ..setEntry(3, 2, 0.0028)
-                        ..rotateY(rotation),
-                      child: Stack(
-                        children: [
-                          child!,
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: shadowFromLeft
-                                        ? Alignment.centerLeft
-                                        : Alignment.centerRight,
-                                    end: shadowFromLeft
-                                        ? Alignment.centerRight
-                                        : Alignment.centerLeft,
-                                    colors: [
-                                      Colors.black.withValues(alpha: 0.55 * t),
-                                      Colors.transparent,
-                                    ],
-                                    stops: const [0.0, 0.4],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
+                // PageView's natural horizontal slide is the page-flip
+                // animation now. The earlier 3D rotation looked book-like
+                // in stills but produced unavoidable diagonal dark wedges
+                // mid-swipe (overlapping perspective trapezoids of two
+                // pages at different rotations) — no shadow setting made
+                // them go away. Plain slide is shadow-free and still reads
+                // as "turning a page" when paired with the storybook frame.
+                return page;
               },
             ),
           ),

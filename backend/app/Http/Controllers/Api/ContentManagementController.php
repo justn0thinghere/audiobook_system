@@ -323,6 +323,228 @@ class ContentManagementController extends ApiController
     }
 
     /**
+     * Update the caregiver-editable fields of an existing audiobook (title,
+     * description, language, etc.). Doesn't touch the page content, audio
+     * file, or cover — those go through separate upload flows.
+     */
+    public function update(Request $request, string $audiobookId): JsonResponse
+    {
+        $this->logEvent('Content', 'update called', [
+            'audiobook_id' => $audiobookId,
+            'fields'       => array_keys($request->all()),
+        ]);
+
+        $book = Audiobook::where('audiobook_id', $audiobookId)->first();
+        if (!$book) {
+            $this->logWarn('Content', 'update not found', [
+                'audiobook_id' => $audiobookId,
+            ]);
+            return $this->errorResponse('Audiobook not found', 'NOT_FOUND', 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'title'        => 'sometimes|string|max:255',
+            'topic'        => 'sometimes|nullable|string|max:100',
+            'category'     => 'sometimes|nullable|string|max:100',
+            'difficulty'   => 'sometimes|nullable|in:easy,medium,hard,Easy,Medium,Hard',
+            'tags'         => 'sometimes|nullable|string',
+            'description'  => 'sometimes|nullable|string',
+            'age_group'    => 'sometimes|nullable|string|max:50',
+            'language'     => 'sometimes|in:en,ms',
+        ]);
+
+        if ($validator->fails()) {
+            $this->logWarn('Content', 'update validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
+            return $this->errorResponse(
+                'Validation failed: ' . implode(', ', $validator->errors()->all()),
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
+        try {
+            $book->fill($validator->validated())->save();
+            $this->logEvent('Content', 'update success', [
+                'audiobook_id' => $book->audiobook_id,
+            ]);
+            return $this->successResponse('Content updated', $this->serialize($book->load('pages')));
+        } catch (\Throwable $e) {
+            $this->logError('Content', 'update exception', [
+                'audiobook_id' => $audiobookId,
+                'error'        => $e->getMessage(),
+            ]);
+            return $this->errorResponse('Could not update content', 'SERVER_ERROR', 500);
+        }
+    }
+
+    /**
+     * Delete an audiobook. The schema's ON DELETE CASCADE cleans up the
+     * related audiobook_pages and listening_history rows automatically.
+     */
+    public function destroy(Request $request, string $audiobookId): JsonResponse
+    {
+        $this->logEvent('Content', 'destroy called', [
+            'audiobook_id' => $audiobookId,
+        ]);
+
+        $book = Audiobook::where('audiobook_id', $audiobookId)->first();
+        if (!$book) {
+            $this->logWarn('Content', 'destroy not found', [
+                'audiobook_id' => $audiobookId,
+            ]);
+            return $this->errorResponse('Audiobook not found', 'NOT_FOUND', 404);
+        }
+
+        try {
+            $book->delete();
+            $this->logEvent('Content', 'destroy success', [
+                'audiobook_id' => $audiobookId,
+            ]);
+            return $this->successResponse('Content deleted');
+        } catch (\Throwable $e) {
+            $this->logError('Content', 'destroy exception', [
+                'audiobook_id' => $audiobookId,
+                'error'        => $e->getMessage(),
+            ]);
+            return $this->errorResponse('Could not delete content', 'SERVER_ERROR', 500);
+        }
+    }
+
+    /**
+     * Update a single page of an existing audiobook (text and/or image
+     * replacement and/or audio-boundary tweak). Multipart so a new image
+     * file can be sent alongside text changes; image is optional — if the
+     * caregiver isn't replacing the picture they just omit the field.
+     */
+    public function updatePage(Request $request, string $audiobookId, string $pageId): JsonResponse
+    {
+        $this->logEvent('Content', 'updatePage called', [
+            'audiobook_id' => $audiobookId,
+            'page_id'      => $pageId,
+            'has_image'    => $request->hasFile('image'),
+            'fields'       => array_keys($request->all()),
+        ]);
+
+        $book = Audiobook::where('audiobook_id', $audiobookId)->first();
+        if (!$book) {
+            $this->logWarn('Content', 'updatePage book not found', [
+                'audiobook_id' => $audiobookId,
+            ]);
+            return $this->errorResponse('Audiobook not found', 'NOT_FOUND', 404);
+        }
+        $page = $book->pages()->where('page_id', $pageId)->first();
+        if (!$page) {
+            $this->logWarn('Content', 'updatePage page not found', [
+                'audiobook_id' => $audiobookId,
+                'page_id'      => $pageId,
+            ]);
+            return $this->errorResponse('Page not found', 'NOT_FOUND', 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'text'           => 'sometimes|nullable|string',
+            'page_number'    => 'sometimes|integer|min:1',
+            'image'          => 'sometimes|nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'audio_start_ms' => 'sometimes|nullable|integer|min:0',
+        ]);
+        if ($validator->fails()) {
+            $this->logWarn('Content', 'updatePage validation failed', [
+                'errors' => $validator->errors()->all(),
+            ]);
+            return $this->errorResponse(
+                'Validation failed: ' . implode(', ', $validator->errors()->all()),
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
+        try {
+            $patch = [];
+            if ($request->has('text')) {
+                $patch['text'] = $request->input('text');
+            }
+            if ($request->filled('page_number')) {
+                $patch['page_number'] = (int) $request->input('page_number');
+            }
+            if ($request->has('audio_start_ms')) {
+                $patch['audio_start_ms'] = $request->filled('audio_start_ms')
+                    ? (int) $request->input('audio_start_ms')
+                    : null;
+            }
+            if ($request->hasFile('image')) {
+                $patch['image'] = 'storage/' . $request->file('image')
+                    ->store('uploads/pages', 'public');
+            }
+
+            $page->fill($patch)->save();
+
+            $this->logEvent('Content', 'updatePage success', [
+                'audiobook_id' => $book->audiobook_id,
+                'page_id'      => $page->page_id,
+            ]);
+            return $this->successResponse('Page updated', [
+                'page_id'        => $page->page_id,
+                'page_number'    => $page->page_number,
+                'text'           => $page->text,
+                'image'          => $this->mediaUrl($page->image),
+                'audio_start_ms' => $page->audio_start_ms,
+            ]);
+        } catch (\Throwable $e) {
+            $this->logError('Content', 'updatePage exception', [
+                'audiobook_id' => $audiobookId,
+                'page_id'      => $pageId,
+                'error'        => $e->getMessage(),
+            ]);
+            return $this->errorResponse('Could not update page', 'SERVER_ERROR', 500);
+        }
+    }
+
+    /**
+     * Delete a single page from an audiobook. Page numbers of remaining
+     * pages aren't auto-shifted — the caller can renumber via updatePage
+     * if it matters for the reader.
+     */
+    public function deletePage(Request $request, string $audiobookId, string $pageId): JsonResponse
+    {
+        $this->logEvent('Content', 'deletePage called', [
+            'audiobook_id' => $audiobookId,
+            'page_id'      => $pageId,
+        ]);
+        $book = Audiobook::where('audiobook_id', $audiobookId)->first();
+        if (!$book) {
+            $this->logWarn('Content', 'deletePage book not found', [
+                'audiobook_id' => $audiobookId,
+            ]);
+            return $this->errorResponse('Audiobook not found', 'NOT_FOUND', 404);
+        }
+        $page = $book->pages()->where('page_id', $pageId)->first();
+        if (!$page) {
+            $this->logWarn('Content', 'deletePage page not found', [
+                'page_id' => $pageId,
+            ]);
+            return $this->errorResponse('Page not found', 'NOT_FOUND', 404);
+        }
+
+        try {
+            $page->delete();
+            $this->logEvent('Content', 'deletePage success', [
+                'audiobook_id' => $audiobookId,
+                'page_id'      => $pageId,
+            ]);
+            return $this->successResponse('Page deleted');
+        } catch (\Throwable $e) {
+            $this->logError('Content', 'deletePage exception', [
+                'audiobook_id' => $audiobookId,
+                'page_id'      => $pageId,
+                'error'        => $e->getMessage(),
+            ]);
+            return $this->errorResponse('Could not delete page', 'SERVER_ERROR', 500);
+        }
+    }
+
+    /**
      * Add a single page (text + optional image) to an existing audiobook.
      * Multipart request: text, image (file), page_number.
      */

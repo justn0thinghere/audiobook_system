@@ -157,10 +157,36 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: _busy
                         ? null
                         : () => setState(() => _isRegisterMode = !_isRegisterMode),
-                    child: Text(
-                      _isRegisterMode
-                          ? context.tr('login.toggle_to_login')
-                          : context.tr('login.toggle_to_register'),
+                    // The prefix question stays neutral grey, the action verb
+                    // takes a warm contrasting colour + underline so it reads
+                    // as the obvious clickable bit instead of blending into
+                    // the primary blue of the Sign in button above.
+                    child: Text.rich(
+                      TextSpan(
+                        style: const TextStyle(fontSize: 14),
+                        children: [
+                          TextSpan(
+                            text: _isRegisterMode
+                                ? context.tr('login.toggle_to_login_prefix')
+                                : context.tr('login.toggle_to_register_prefix'),
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          TextSpan(
+                            text: _isRegisterMode
+                                ? context.tr('login.toggle_to_login_action')
+                                : context.tr('login.toggle_to_register_action'),
+                            style: const TextStyle(
+                              color: AppColors.primaryBlueDark,
+                              fontWeight: FontWeight.w800,
+                              decoration: TextDecoration.underline,
+                              decorationThickness: 2,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
