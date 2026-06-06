@@ -57,4 +57,23 @@ abstract class ApiController
             'timestamp' => now('Asia/Kuala_Lumpur')->format('Y-m-d H:i:s'),
         ], $statusCode);
     }
+
+    /**
+     * Build an absolute URL for a stored relative path (e.g. "storage/uploads/..").
+     *
+     * Uses the INCOMING request's scheme+host so the URL is always reachable by
+     * whatever client is asking — Android emulator (10.0.2.2), a real phone on
+     * Wi-Fi, etc. Already-absolute URLs (Gemini image links) pass through unchanged.
+     */
+    protected function mediaUrl(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return null;
+        }
+        if (\Illuminate\Support\Str::startsWith($path, ['http://', 'https://'])) {
+            return $path;
+        }
+        $base = rtrim(request()->getSchemeAndHttpHost(), '/');
+        return $base . '/' . ltrim($path, '/');
+    }
 }

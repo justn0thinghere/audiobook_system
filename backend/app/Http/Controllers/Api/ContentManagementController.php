@@ -649,21 +649,6 @@ class ContentManagementController extends ApiController
         }
     }
 
-    /**
-     * Turn a stored media reference into a usable URL. Locally-stored files
-     * (e.g. "storage/uploads/...") are made absolute; values that are already
-     * full URLs (e.g. AI image links) are returned unchanged.
-     */
-    private function mediaUrl(?string $path): ?string
-    {
-        if ($path === null || $path === '') {
-            return null;
-        }
-        return \Illuminate\Support\Str::startsWith($path, ['http://', 'https://'])
-            ? $path
-            : url($path);
-    }
-
     private function serializePages(Audiobook $item): array
     {
         return $item->pages->map(fn ($p) => [
@@ -704,7 +689,7 @@ class ContentManagementController extends ApiController
                 'track_id'      => $track->track_id,
                 'title'         => $track->title,
                 'composer'      => $track->composer,
-                'file_url'      => url($track->file_path),
+                'file_url'      => $this->mediaUrl($track->file_path),
                 'tags'          => $track->tagsArray(),
                 'duration_secs' => $track->duration_secs,
             ] : null,

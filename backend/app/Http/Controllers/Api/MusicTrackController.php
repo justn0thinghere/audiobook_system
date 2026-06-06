@@ -121,7 +121,7 @@ class MusicTrackController extends ApiController
             'track_id'      => $t->track_id,
             'title'         => $t->title,
             'composer'      => $t->composer,
-            'file_url'      => url($t->file_path),
+            'file_url'      => $this->mediaUrl($t->file_path),
             'tags'          => $t->tagsArray(),
             'tempo'         => $t->tempo,
             'duration_secs' => $t->duration_secs,

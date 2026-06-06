@@ -100,31 +100,4 @@ class AudiobookController extends ApiController
         }
     }
 
-    /**
-     * Locally-stored media (e.g. "storage/uploads/...") is made absolute;
-     * values that are already full URLs (e.g. AI image links) pass through.
-     */
-    /**
-     * Build an absolute URL for a stored relative path (e.g. "storage/uploads/..").
-     *
-     * Uses the INCOMING request's scheme+host instead of APP_URL, so the URL
-     * is always reachable by whatever client is asking — the Android emulator
-     * (which talks to the host as 10.0.2.2), a real phone on Wi-Fi, anything
-     * else. With APP_URL=http://localhost the emulator would never reach the
-     * static file and just_audio would silently fail, putting the player into
-     * its TTS fallback.
-     *
-     * Already-absolute URLs (Gemini image links) pass through unchanged.
-     */
-    private function mediaUrl(?string $path): ?string
-    {
-        if ($path === null || $path === '') {
-            return null;
-        }
-        if (\Illuminate\Support\Str::startsWith($path, ['http://', 'https://'])) {
-            return $path;
-        }
-        $base = rtrim(request()->getSchemeAndHttpHost(), '/');
-        return $base . '/' . ltrim($path, '/');
-    }
 }
