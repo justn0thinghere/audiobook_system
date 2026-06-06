@@ -99,9 +99,10 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   String _narrationText = ''; // text of the page currently being narrated
 
   // Background music — a separate player so it never interferes with the
-  // narration / story-audio engine. Null until the book is loaded.
+  // narration / story-audio engine.
   final AudioPlayer _bgmPlayer = AudioPlayer();
-  int _bgmVolume = 30; // 0-100, sourced from Audiobook.bgmVolume
+  int _bgmVolume = 30;    // 0-100, sourced from Audiobook.bgmVolume
+  bool _bgmStarted = false; // true once the URL has been loaded and play() called
 
   // Settings are local to this player session — child changes in here don't
   // persist back to the child's stored settings (those belong to the
@@ -298,11 +299,11 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
 
     if (mounted) setState(() => _loading = false);
 
-    // Start BGM on loop if the audiobook has a music track assigned.
-    final bgmUrl = _audiobook?.musicTrackFileUrl;
-    if (bgmUrl != null && bgmUrl.isNotEmpty) {
-      _bgmVolume = _audiobook!.bgmVolume;
-      _startBgm(bgmUrl);
+    // Store the BGM volume so the slider is correct before the user taps Listen.
+    // The actual audio is deferred until the first play tap (_startBgmIfNeeded).
+    final book = _audiobook;
+    if (book != null && book.musicTrackFileUrl != null) {
+      _bgmVolume = book.bgmVolume;
     }
 
     // Warm up the image cache for every page now (decoded at the same
