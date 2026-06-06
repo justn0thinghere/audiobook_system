@@ -312,11 +312,18 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     if (mounted) _precachePageImages();
   }
 
-  Future<void> _startBgm(String url) async {
+  /// Start BGM the first time (loads URL, sets volume, loops), or resume it on
+  /// subsequent calls. No-op if this audiobook has no music track assigned.
+  Future<void> _startBgmIfNeeded() async {
+    final url = _audiobook?.musicTrackFileUrl;
+    if (url == null || url.isEmpty) return;
     try {
-      await _bgmPlayer.setUrl(url);
-      await _bgmPlayer.setVolume(_bgmVolume / 100.0);
-      await _bgmPlayer.setLoopMode(LoopMode.one);
+      if (!_bgmStarted) {
+        _bgmStarted = true;
+        await _bgmPlayer.setUrl(url);
+        await _bgmPlayer.setVolume(_bgmVolume / 100.0);
+        await _bgmPlayer.setLoopMode(LoopMode.one);
+      }
       await _bgmPlayer.play();
     } catch (_) {
       // BGM is non-essential; silently ignore failures.
@@ -378,10 +385,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     }
     if (_playingAudio) {
       await _engine.pause();
+      unawaited(_bgmPlayer.pause());
       _listenWatch.stop();
       _pauseCount++; // UC-9: user-initiated pause
     } else {
       unawaited(_engine.play()); // see note in _toggleNarration
+      unawaited(_startBgmIfNeeded());
       _listenWatch.start();
       // No need to subscribe here — _loadAudiobook already armed the position
       // listener as soon as the recording loaded, so page auto-advance works
@@ -399,11 +408,13 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     if (_naturalPlaying) {
       if (_playingAudio) {
         await _engine.pause();
+        unawaited(_bgmPlayer.pause());
         _listenWatch.stop();
         _pauseCount++; // UC-9: user-initiated pause
         if (mounted) setState(() => _playingAudio = false);
       } else {
         unawaited(_engine.play()); // see note in fresh-play branch below
+        unawaited(_startBgmIfNeeded());
         _listenWatch.start();
         if (mounted) setState(() => _playingAudio = true);
       }
@@ -452,6 +463,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
         // it would block the setState below until the clip finished, which is
         // why Listen used to need two taps before Pause + read-along showed.
         unawaited(_engine.play());
+        unawaited(_startBgmIfNeeded());
         _listenWatch.start();
         if (mounted) setState(() => _playingAudio = true);
       } catch (e) {
@@ -707,15 +719,20 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
 
     final isLastPage = _page >= _pages.length - 1;
     if (isLastPage) {
+      unawaited(_bgmPlayer.pause()); // story finished — stop BGM
       _reachedEnd = true;
       _recordSessionIfNeeded();
       _showFinishDialog();
       return;
     }
     if (_readSettings().autoPlayNext) {
+      // BGM keeps playing through the auto-advance; _startBgmIfNeeded in
+      // _toggleNarration will resume it if it ever got paused.
       _changePage(_page + 1).then((_) {
         if (mounted) _toggleNarration();
       });
+    } else {
+      unawaited(_bgmPlayer.pause()); // waiting for user to tap Listen again
     }
   }
 
