@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
@@ -331,10 +332,14 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
       seen.add(url);
     }
     for (final url in seen) {
+      // CachedNetworkImageProvider hits the disk cache first, then network.
+      // Once a page image has been fetched once, subsequent visits skip the
+      // HTTP roundtrip entirely — which is the whole point on a slow
+      // emulator loopback or after an app restart.
       precacheImage(
-        ResizeImage(NetworkImage(url), width: 800),
+        CachedNetworkImageProvider(url, maxWidth: 800),
         context,
-        onError: (_, _) {}, // silent: the Image.network widget will retry
+        onError: (_, _) {}, // silent: the display widget will retry on view
       );
     }
   }
@@ -1485,19 +1490,20 @@ class _Illustration extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: (imageUrl != null && imageUrl!.isNotEmpty)
-            ? Image.network(
-                imageUrl!,
+            ? CachedNetworkImage(
+                imageUrl: imageUrl!,
                 fit: BoxFit.cover,
                 width: double.infinity,
-                // Decode at a reduced size — the AI images are 1024x1024 (~1.4MB)
-                // and decoding several at full size can fail on low-memory
-                // devices, so the picture silently falls back to a placeholder.
-                cacheWidth: 800,
-                errorBuilder: (_, _, _) => _placeholder(),
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return _placeholder(loading: true);
-                },
+                // Decode at a reduced size — the AI images are 1024x1024
+                // (~1.4MB) and decoding several at full size can fail on
+                // low-memory devices. CachedNetworkImage keeps a disk copy
+                // separate from this decode size, so re-views are instant
+                // even after eviction from the in-memory cache.
+                memCacheWidth: 800,
+                placeholder: (_, _) => _placeholder(loading: true),
+                errorWidget: (_, _, _) => _placeholder(),
+                fadeInDuration: const Duration(milliseconds: 120),
+                fadeOutDuration: Duration.zero,
               )
             : _placeholder(),
       ),

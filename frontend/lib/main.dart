@@ -19,6 +19,14 @@ import 'pages/shared/auth_gate.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Default Flutter image cache is 1000 entries / 100 MB. Storybook pages
+  // can be 800–1200 px JPEGs, and with 4–6 pages plus covers across the
+  // child mode + caregiver content list the cache evicts itself, forcing
+  // re-fetches from the backend over the emulator's slow HTTP loopback.
+  // Bumping these up keeps already-loaded illustrations resident.
+  PaintingBinding.instance.imageCache
+    ..maximumSize = 250
+    ..maximumSizeBytes = 250 << 20; // 250 MB
   runApp(const AudiobookApp());
 }
 

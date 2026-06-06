@@ -24,6 +24,14 @@ dependencies:
   # Image picking for per-page storybook upload
   image_picker: ^1.1.2
 
+  # Persistent disk cache for audiobook page illustrations + thumbnails. The
+  # backend stores them as static files under storage/, but every Image
+  # widget call still goes through a real HTTP request to the emulator's
+  # 10.0.2.2:8000 — the default in-memory cache evicts under pressure and
+  # disappears on app restart. cached_network_image keeps a disk cache so
+  # the second visit is instant.
+  cached_network_image: ^3.4.1
+
   # Audio file picking for the whole-book narration upload
   file_picker: ^8.0.0+1
 
