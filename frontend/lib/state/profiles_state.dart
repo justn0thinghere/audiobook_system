@@ -89,11 +89,11 @@ class ProfilesState extends ChangeNotifier {
     String? favoriteGenre,
   }) async {
     final patch = <String, dynamic>{
-      if (name != null) 'name': name,
-      if (age != null) 'age': age,
-      if (avatarEmoji != null) 'avatar_emoji': avatarEmoji,
-      if (avatarColorHex != null) 'avatar_color': avatarColorHex,
-      if (favoriteGenre != null) 'favorite_genre': favoriteGenre,
+      'name': ?name,
+      'age': ?age,
+      'avatar_emoji': ?avatarEmoji,
+      'avatar_color': ?avatarColorHex,
+      'favorite_genre': ?favoriteGenre,
     };
     if (patch.isEmpty) return true;
     final resp = await DatabaseService.updateChildProfile(childId, patch);

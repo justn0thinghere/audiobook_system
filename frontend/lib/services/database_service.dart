@@ -120,8 +120,8 @@ class DatabaseService {
       if (email != null && email.isNotEmpty) 'email': email,
       if (mobileNumber != null && mobileNumber.isNotEmpty)
         'mobile_number': mobileNumber,
-      if (deviceId != null) 'device_id': deviceId,
-      if (deviceName != null) 'device_name': deviceName,
+      'device_id': ?deviceId,
+      'device_name': ?deviceName,
     });
     if (resp.success) await _persistSession(resp);
     return resp;
@@ -140,9 +140,9 @@ class DatabaseService {
       if (email != null && email.isNotEmpty) 'email': email,
       if (mobileNumber != null && mobileNumber.isNotEmpty)
         'mobile_number': mobileNumber,
-      if (deviceId != null) 'device_id': deviceId,
-      if (deviceName != null) 'device_name': deviceName,
-      if (fcmToken != null) 'fcm_token': fcmToken,
+      'device_id': ?deviceId,
+      'device_name': ?deviceName,
+      'fcm_token': ?fcmToken,
     });
     if (resp.success) await _persistSession(resp);
     return resp;
@@ -302,7 +302,7 @@ class DatabaseService {
       'age': age,
       'avatar_emoji': avatarEmoji,
       'avatar_color': avatarColorHex,
-      if (favoriteGenre != null) 'favorite_genre': favoriteGenre,
+      'favorite_genre': ?favoriteGenre,
     });
     if (resp.success && resp.data is Map<String, dynamic>) {
       return ApiResponse(
@@ -358,7 +358,7 @@ class DatabaseService {
     String? language, // 'en' or 'ms' — narrows the library to one language
   }) async {
     final resp = await _post('/content/list', body: {
-      if (filterType != null) 'filter_type': filterType,
+      'filter_type': ?filterType,
       if (search != null && search.isNotEmpty) 'search': search,
       if (category != null && category.isNotEmpty) 'category': category,
       if (ageGroup != null && ageGroup.isNotEmpty) 'age_group': ageGroup,
@@ -630,7 +630,7 @@ class DatabaseService {
         if (tags != null && tags.isNotEmpty) 'tags': tags,
         if (sourceText != null && sourceText.isNotEmpty) 'source_text': sourceText,
         'generate_image': generateImage,
-        if (pageCount != null) 'page_count': pageCount,
+        'page_count': ?pageCount,
         if (language != null && language.isNotEmpty) 'language': language,
       },
     );
@@ -683,12 +683,12 @@ class DatabaseService {
     return _post('/listening-history/record', body: {
       'child_id': childId,
       'audiobook_id': audiobookId,
-      if (durationSeconds != null) 'duration_seconds': durationSeconds,
-      if (lastPositionSeconds != null) 'last_position_seconds': lastPositionSeconds,
-      if (mood != null) 'mood': mood,
-      if (completed != null) 'completed': completed,
-      if (pauseCount != null) 'pause_count': pauseCount,
-      if (skipCount != null) 'skip_count': skipCount,
+      'duration_seconds': ?durationSeconds,
+      'last_position_seconds': ?lastPositionSeconds,
+      'mood': ?mood,
+      'completed': ?completed,
+      'pause_count': ?pauseCount,
+      'skip_count': ?skipCount,
     });
   }
 
@@ -739,7 +739,7 @@ class DatabaseService {
   }) async {
     final resp = await _post('/insights/$childId/suggestions/apply', body: {
       'item_id': itemId,
-      if (overrideValue != null) 'override_value': overrideValue,
+      'override_value': ?overrideValue,
     });
     return _wrapSuggestionResponse(resp);
   }
