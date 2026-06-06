@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -575,11 +576,17 @@ class _PageImageThumb extends StatelessWidget {
         errorBuilder: (_, _, _) => _placeholder(),
       );
     } else if (url != null && url.isNotEmpty) {
-      content = Image.network(
-        url,
+      // CachedNetworkImage keeps a disk copy of the page's existing image
+      // so reopening the edit screen is instant and editing 30 pages
+      // doesn't hammer the dev server with re-downloads.
+      content = CachedNetworkImage(
+        imageUrl: url,
         fit: BoxFit.cover,
-        cacheWidth: 200,
-        errorBuilder: (_, _, _) => _placeholder(),
+        memCacheWidth: 200,
+        placeholder: (_, _) => _placeholder(),
+        errorWidget: (_, _, _) => _placeholder(),
+        fadeInDuration: const Duration(milliseconds: 120),
+        fadeOutDuration: Duration.zero,
       );
     } else {
       content = _placeholder();

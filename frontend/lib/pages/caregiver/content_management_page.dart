@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../i18n/i18n.dart';
@@ -574,33 +575,32 @@ class _Thumbnail extends StatelessWidget {
     if (imageUrl != null && imageUrl!.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          imageUrl!,
+        // CachedNetworkImage keeps a disk copy so scrolling the list back
+        // and forth — or popping back from preview — doesn't re-fetch
+        // every thumbnail over HTTP. Tiny memCacheWidth saves decoded
+        // RAM since these are 48x48 on screen.
+        child: CachedNetworkImage(
+          imageUrl: imageUrl!,
           width: 48,
           height: 48,
           fit: BoxFit.cover,
-          cacheWidth: 150, // tiny thumbnail; decode small to save memory
-          errorBuilder: (_, _, _) => _iconCircle(),
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return SizedBox(
-              width: 48,
-              height: 48,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: meta.bg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
+          memCacheWidth: 150,
+          errorWidget: (_, _, _) => _iconCircle(),
+          placeholder: (_, _) => Container(
+            decoration: BoxDecoration(
+              color: meta.bg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-            );
-          },
+            ),
+          ),
+          fadeInDuration: const Duration(milliseconds: 120),
+          fadeOutDuration: Duration.zero,
         ),
       );
     }
