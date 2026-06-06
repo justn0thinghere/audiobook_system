@@ -1,4 +1,5 @@
 import '_json_helpers.dart';
+import 'music_track.dart';
 
 class ContentItem {
   final String? audiobookId;
@@ -21,6 +22,9 @@ class ContentItem {
   final String? status;
   final String? language; // 'en' or 'ms'
   final DateTime? createdAt;
+  final String? trackId;
+  final int bgmVolume; // 0–100
+  final MusicTrack? musicTrack;
 
   ContentItem({
     this.audiobookId,
@@ -43,9 +47,13 @@ class ContentItem {
     this.status,
     this.language,
     this.createdAt,
+    this.trackId,
+    this.bgmVolume = 30,
+    this.musicTrack,
   });
 
   factory ContentItem.fromJson(Map<String, dynamic> json) {
+    final rawTrack = json['music_track'];
     return ContentItem(
       audiobookId: safeNullableString(json['audiobook_id']),
       title: safeString(json['title'], 'Untitled'),
@@ -67,6 +75,11 @@ class ContentItem {
       status: safeNullableString(json['status']),
       language: safeNullableString(json['language']),
       createdAt: safeDate(json['created_at']),
+      trackId: safeNullableString(json['track_id']),
+      bgmVolume: safeInt(json['bgm_volume']) ?? 30,
+      musicTrack: rawTrack is Map<String, dynamic>
+          ? MusicTrack.fromJson(rawTrack)
+          : null,
     );
   }
 

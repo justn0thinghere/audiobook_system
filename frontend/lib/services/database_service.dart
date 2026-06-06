@@ -12,6 +12,7 @@ import '../models/caregiver.dart';
 import '../models/child_profile.dart';
 import '../models/content_item.dart';
 import '../models/content_summary.dart';
+import '../models/music_track.dart';
 import '../models/insights_overview.dart';
 import '../models/user_settings.dart';
 import 'api_service.dart';
@@ -483,6 +484,8 @@ class DatabaseService {
     String? coverImagePath,
     String? audioFilePath, // optional whole-book narration recording
     String? language, // 'en' or 'ms'
+    String? trackId,  // BGM track UUID, or null for none
+    int bgmVolume = 30,
   }) async {
     if (!await _hasNetworkConnection()) {
       return ApiResponse.failure(
@@ -524,6 +527,10 @@ class DatabaseService {
       if (language != null && language.isNotEmpty) {
         request.fields['language'] = language;
       }
+      if (trackId != null && trackId.isNotEmpty) {
+        request.fields['track_id'] = trackId;
+      }
+      request.fields['bgm_volume'] = bgmVolume.toString();
 
       final streamed = await request.send().timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamed);
@@ -616,11 +623,13 @@ class DatabaseService {
     String? sourceText,
     bool generateImage = true,
     int? pageCount,
-    String? language, // 'en' or 'ms' — tells Gemini which language to write in
+    String? language,     // 'en' or 'ms'
+    String? trackId,      // null = auto-select; omit key entirely = no BGM
+    bool includeBgm = false,
+    int bgmVolume = 30,
   }) async {
     final resp = await _post(
       '/content/generate',
-      // Images generate inline (~12s/page), so allow time for a few pages.
       timeout: const Duration(seconds: 180),
       body: {
         'topic': topic,
@@ -632,6 +641,9 @@ class DatabaseService {
         'generate_image': generateImage,
         'page_count': ?pageCount,
         if (language != null && language.isNotEmpty) 'language': language,
+        // BGM: only send track_id key when BGM is enabled (null = auto-select)
+        if (includeBgm) 'track_id': trackId,
+        if (includeBgm) 'bgm_volume': bgmVolume,
       },
     );
     if (resp.success && resp.data is Map<String, dynamic>) {
@@ -762,6 +774,52 @@ class DatabaseService {
         message: resp.message,
         data: AiSuggestion.fromJson(resp.data as Map<String, dynamic>),
       );
+    }
+    return resp;
+  }
+
+  // ---------- music tracks ----------
+
+  /// List active music tracks. [tags] filters to tracks that have ALL listed
+  /// tags. [search] matches against "title-composer" label.
+  static Future<ApiResponse> listMusicTracks({
+    List<String>? tags,
+    String? search,
+  }) async {
+    final resp = await _post('/music-tracks/list', body: {
+      if (tags != null && tags.isNotEmpty) 'tags': tags,
+      if (search != null && search.isNotEmpty) 'search': search,
+    });
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      final raw = (resp.data as Map<String, dynamic>)['tracks'];
+      final list = raw is List
+          ? raw.whereType<Map<String, dynamic>>().map(MusicTrack.fromJson).toList()
+          : <MusicTrack>[];
+      return ApiResponse(success: true, message: resp.message, data: list);
+    }
+    return resp;
+  }
+
+  /// Return all distinct tags across active tracks (sorted).
+  static Future<ApiResponse> getMusicTrackTags() async {
+    final resp = await _post('/music-tracks/tags');
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      final raw = (resp.data as Map<String, dynamic>)['tags'];
+      final list = raw is List ? raw.map((t) => t.toString()).toList() : <String>[];
+      return ApiResponse(success: true, message: resp.message, data: list);
+    }
+    return resp;
+  }
+
+  /// Given already-selected tags, return only tags that still produce results.
+  static Future<ApiResponse> getCompatibleMusicTags(List<String> selected) async {
+    final resp = await _post('/music-tracks/compatible-tags', body: {
+      'selected_tags': selected,
+    });
+    if (resp.success && resp.data is Map<String, dynamic>) {
+      final raw = (resp.data as Map<String, dynamic>)['tags'];
+      final list = raw is List ? raw.map((t) => t.toString()).toList() : <String>[];
+      return ApiResponse(success: true, message: resp.message, data: list);
     }
     return resp;
   }

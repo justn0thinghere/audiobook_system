@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ChildProfileController;
 use App\Http\Controllers\Api\ContentManagementController;
 use App\Http\Controllers\Api\InsightsController;
 use App\Http\Controllers\Api\ListeningHistoryController;
+use App\Http\Controllers\Api\MusicTrackController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TtsController;
 use Illuminate\Support\Facades\Route;
@@ -80,4 +81,11 @@ Route::middleware('session.auth')->group(function () {
 
     // Natural-voice narration
     Route::post('/tts/speak', [TtsController::class, 'speak']);
+
+    // Background music tracks
+    Route::prefix('music-tracks')->group(function () {
+        Route::post('/list',             [MusicTrackController::class, 'list']);
+        Route::post('/tags',             [MusicTrackController::class, 'allTags']);
+        Route::post('/compatible-tags',  [MusicTrackController::class, 'compatibleTags']);
+    });
 });

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
 import '../../audio/audio_engine.dart';
@@ -96,6 +97,11 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   List<_WordSpan> _wordSpans = const [];
   String _narrationText = ''; // text of the page currently being narrated
 
+  // Background music — a separate player so it never interferes with the
+  // narration / story-audio engine. Null until the book is loaded.
+  final AudioPlayer _bgmPlayer = AudioPlayer();
+  int _bgmVolume = 30; // 0-100, sourced from Audiobook.bgmVolume
+
   // Settings are local to this player session — child changes in here don't
   // persist back to the child's stored settings (those belong to the
   // caregiver to manage via the Settings tab). For preview mode it starts at
@@ -157,6 +163,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     _audioPosSub?.cancel();
     _audioDurSub?.cancel();
     _engine.stop();
+    _bgmPlayer.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -289,10 +296,29 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     }
 
     if (mounted) setState(() => _loading = false);
+
+    // Start BGM on loop if the audiobook has a music track assigned.
+    final bgmUrl = _audiobook?.musicTrackFileUrl;
+    if (bgmUrl != null && bgmUrl.isNotEmpty) {
+      _bgmVolume = _audiobook!.bgmVolume;
+      _startBgm(bgmUrl);
+    }
+
     // Warm up the image cache for every page now (decoded at the same
     // cacheWidth the player uses) so swiping/clicking Next shows the picture
     // instantly instead of waiting for download + decode at view time.
     if (mounted) _precachePageImages();
+  }
+
+  Future<void> _startBgm(String url) async {
+    try {
+      await _bgmPlayer.setUrl(url);
+      await _bgmPlayer.setVolume(_bgmVolume / 100.0);
+      await _bgmPlayer.setLoopMode(LoopMode.one);
+      await _bgmPlayer.play();
+    } catch (_) {
+      // BGM is non-essential; silently ignore failures.
+    }
   }
 
   void _precachePageImages() {
@@ -1096,6 +1122,34 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
               ],
             ),
           ),
+          if (_audiobook?.trackId != null) ...[
+            const SizedBox(height: 18),
+            _SettingSectionLabel(
+              icon: Icons.library_music_rounded,
+              label: 'Background Music Volume',
+              trailing: _ValuePill(value: '$_bgmVolume%'),
+            ),
+            const SizedBox(height: 4),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: AppColors.primaryBlueDark,
+                thumbColor: AppColors.primaryBlueDark,
+                overlayColor: AppColors.primaryBlue.withValues(alpha: 0.2),
+                inactiveTrackColor: AppColors.cardBorder,
+              ),
+              child: Slider(
+                value: _bgmVolume.toDouble(),
+                min: 0,
+                max: 100,
+                divisions: 20,
+                label: '$_bgmVolume%',
+                onChanged: (value) async {
+                  setState(() => _bgmVolume = value.round());
+                  await _bgmPlayer.setVolume(_bgmVolume / 100.0);
+                },
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           _SettingSectionLabel(
             icon: Icons.format_size_rounded,

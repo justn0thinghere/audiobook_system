@@ -33,7 +33,7 @@ class AudiobookController extends ApiController
                 );
             }
 
-            $audiobook = Audiobook::where('audiobook_id', $audiobookId)->first();
+            $audiobook = Audiobook::with('musicTrack')->where('audiobook_id', $audiobookId)->first();
 
             if (!$audiobook) {
                 $this->logWarn('Audiobook', 'getAudiobookData not found', [
@@ -73,6 +73,17 @@ class AudiobookController extends ApiController
                     'image'          => $this->mediaUrl($p->image),
                     'audio_start_ms' => $p->audio_start_ms,
                 ])->toArray(),
+                'track_id'         => $audiobook->track_id,
+                'bgm_volume'       => $audiobook->bgm_volume ?? 30,
+                'music_track'      => $audiobook->musicTrack ? [
+                    'track_id'     => $audiobook->musicTrack->track_id,
+                    'title'        => $audiobook->musicTrack->title,
+                    'composer'     => $audiobook->musicTrack->composer,
+                    'file_url'     => $this->mediaUrl($audiobook->musicTrack->file_path),
+                    'tags'         => $audiobook->musicTrack->tagsArray(),
+                    'tempo'        => $audiobook->musicTrack->tempo,
+                    'duration_secs'=> $audiobook->musicTrack->duration_secs,
+                ] : null,
                 'created_at'       => $audiobook->created_at
                     ? Carbon::parse($audiobook->created_at)->format('Y-m-d H:i:s')
                     : null,
