@@ -773,7 +773,7 @@ class InsightsController extends ApiController
      *
      * Already-absolute URLs (Gemini image links) pass through unchanged.
      */
-    private function mediaUrl(?string $path): ?string
+    protected function mediaUrl(?string $path): ?string
     {
         if ($path === null || $path === '') {
             return null;

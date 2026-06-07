@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
 import '../../audio/audio_engine.dart';
@@ -97,6 +98,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
   List<_WordSpan> _wordSpans = const [];
   String _narrationText = ''; // text of the page currently being narrated
 
+  // Background music — a separate player so it never interferes with the
+  // narration / story-audio engine.
+  final AudioPlayer _bgmPlayer = AudioPlayer();
+  int _bgmVolume = 30;    // 0-100, sourced from Audiobook.bgmVolume
+  bool _bgmStarted = false; // true once the URL has been loaded and play() called
+
   // Settings are local to this player session — child changes in here don't
   // persist back to the child's stored settings (those belong to the
   // caregiver to manage via the Settings tab). For preview mode it starts at
@@ -158,6 +165,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     _audioPosSub?.cancel();
     _audioDurSub?.cancel();
     _engine.stop();
+    _bgmPlayer.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -290,10 +298,36 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     }
 
     if (mounted) setState(() => _loading = false);
+
+    // Store the BGM volume so the slider is correct before the user taps Listen.
+    // The actual audio is deferred until the first play tap (_startBgmIfNeeded).
+    final book = _audiobook;
+    if (book != null && book.musicTrackFileUrl != null) {
+      _bgmVolume = book.bgmVolume;
+    }
+
     // Warm up the image cache for every page now (decoded at the same
     // cacheWidth the player uses) so swiping/clicking Next shows the picture
     // instantly instead of waiting for download + decode at view time.
     if (mounted) _precachePageImages();
+  }
+
+  /// Start BGM the first time (loads URL, sets volume, loops), or resume it on
+  /// subsequent calls. No-op if this audiobook has no music track assigned.
+  Future<void> _startBgmIfNeeded() async {
+    final url = _audiobook?.musicTrackFileUrl;
+    if (url == null || url.isEmpty) return;
+    try {
+      if (!_bgmStarted) {
+        _bgmStarted = true;
+        await _bgmPlayer.setUrl(url);
+        await _bgmPlayer.setVolume(_bgmVolume / 100.0);
+        await _bgmPlayer.setLoopMode(LoopMode.one);
+      }
+      await _bgmPlayer.play();
+    } catch (_) {
+      // BGM is non-essential; silently ignore failures.
+    }
   }
 
   void _precachePageImages() {
@@ -351,10 +385,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     }
     if (_playingAudio) {
       await _engine.pause();
+      unawaited(_bgmPlayer.pause());
       _listenWatch.stop();
       _pauseCount++; // UC-9: user-initiated pause
     } else {
       unawaited(_engine.play()); // see note in _toggleNarration
+      unawaited(_startBgmIfNeeded());
       _listenWatch.start();
       // No need to subscribe here — _loadAudiobook already armed the position
       // listener as soon as the recording loaded, so page auto-advance works
@@ -372,11 +408,13 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     if (_naturalPlaying) {
       if (_playingAudio) {
         await _engine.pause();
+        unawaited(_bgmPlayer.pause());
         _listenWatch.stop();
         _pauseCount++; // UC-9: user-initiated pause
         if (mounted) setState(() => _playingAudio = false);
       } else {
         unawaited(_engine.play()); // see note in fresh-play branch below
+        unawaited(_startBgmIfNeeded());
         _listenWatch.start();
         if (mounted) setState(() => _playingAudio = true);
       }
@@ -425,6 +463,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
         // it would block the setState below until the clip finished, which is
         // why Listen used to need two taps before Pause + read-along showed.
         unawaited(_engine.play());
+        unawaited(_startBgmIfNeeded());
         _listenWatch.start();
         if (mounted) setState(() => _playingAudio = true);
       } catch (e) {
@@ -680,15 +719,20 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
 
     final isLastPage = _page >= _pages.length - 1;
     if (isLastPage) {
+      unawaited(_bgmPlayer.pause()); // story finished — stop BGM
       _reachedEnd = true;
       _recordSessionIfNeeded();
       _showFinishDialog();
       return;
     }
     if (_readSettings().autoPlayNext) {
+      // BGM keeps playing through the auto-advance; _startBgmIfNeeded in
+      // _toggleNarration will resume it if it ever got paused.
       _changePage(_page + 1).then((_) {
         if (mounted) _toggleNarration();
       });
+    } else {
+      unawaited(_bgmPlayer.pause()); // waiting for user to tap Listen again
     }
   }
 
@@ -1101,6 +1145,34 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
               ],
             ),
           ),
+          if (_audiobook?.trackId != null) ...[
+            const SizedBox(height: 18),
+            _SettingSectionLabel(
+              icon: Icons.library_music_rounded,
+              label: 'Background Music Volume',
+              trailing: _ValuePill(value: '$_bgmVolume%'),
+            ),
+            const SizedBox(height: 4),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: AppColors.primaryBlueDark,
+                thumbColor: AppColors.primaryBlueDark,
+                overlayColor: AppColors.primaryBlue.withValues(alpha: 0.2),
+                inactiveTrackColor: AppColors.cardBorder,
+              ),
+              child: Slider(
+                value: _bgmVolume.toDouble(),
+                min: 0,
+                max: 100,
+                divisions: 20,
+                label: '$_bgmVolume%',
+                onChanged: (value) async {
+                  setState(() => _bgmVolume = value.round());
+                  await _bgmPlayer.setVolume(_bgmVolume / 100.0);
+                },
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           _SettingSectionLabel(
             icon: Icons.format_size_rounded,

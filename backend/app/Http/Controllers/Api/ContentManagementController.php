@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Jobs\GenerateAudiobookImages;
 use App\Models\Audiobook;
+use App\Models\MusicTrack;
 use App\Services\GeminiService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -127,6 +128,8 @@ class ContentManagementController extends ApiController
             'audio_file'   => 'nullable|file|max:20480|mimetypes:audio/mpeg,audio/mp3,audio/mpga,audio/wav,audio/x-wav,audio/wave,audio/vnd.wave,audio/x-pn-wav,audio/mp4,audio/x-m4a,audio/aac,audio/x-aac,audio/ogg,audio/vorbis,audio/flac,audio/webm',
             'video_file'   => 'nullable|file|mimes:mp4,mov,webm|max:51200',
             'cover_image'  => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+            'track_id'     => 'nullable|uuid|exists:music_tracks,track_id',
+            'bgm_volume'   => 'nullable|integer|min:0|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -182,6 +185,8 @@ class ContentManagementController extends ApiController
                 'is_generated'     => $isGenerated,
                 'is_user_uploaded' => true,
                 'status'           => $isGenerated ? 'processing' : 'available',
+                'track_id'         => $request->input('track_id') ?: null,
+                'bgm_volume'       => $request->filled('bgm_volume') ? (int) $request->input('bgm_volume') : 30,
             ]);
 
             $this->logEvent('Content', 'createContent success', [
@@ -221,6 +226,8 @@ class ContentManagementController extends ApiController
             'generate_image' => 'nullable|boolean',
             'page_count'     => 'nullable|integer|min:1|max:20',
             'language'       => 'nullable|in:en,ms',
+            'track_id'       => 'nullable|uuid|exists:music_tracks,track_id',
+            'bgm_volume'     => 'nullable|integer|min:0|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -278,6 +285,8 @@ class ContentManagementController extends ApiController
                 'is_generated'     => true,
                 'is_user_uploaded' => true,
                 'status'           => $generateImages ? 'processing' : 'available',
+                'track_id'         => $this->resolveTrackId($request, $story['content'] ?? ''),
+                'bgm_volume'       => $request->filled('bgm_volume') ? (int) $request->input('bgm_volume') : 30,
             ]);
 
             foreach ($story['pages'] as $i => $page) {
@@ -294,6 +303,16 @@ class ContentManagementController extends ApiController
                 @ignore_user_abort(true); // finish even if the client navigates away
                 GenerateAudiobookImages::dispatch($content->audiobook_id);
                 $content->refresh(); // 'available' now if the job ran inline (sync)
+            }
+
+            // Pre-warm TTS cache for every page with the default voice so the
+            // caregiver's first preview plays without a generation delay.
+            if ($gemini->isConfigured()) {
+                foreach ($content->pages as $pg) {
+                    if (!empty($pg->text)) {
+                        try { $gemini->generateSpeech(trim($pg->text), 'Kore'); } catch (\Throwable $_) {}
+                    }
+                }
             }
 
             $ready = $content->status === 'available';
@@ -548,7 +567,7 @@ class ContentManagementController extends ApiController
      * Add a single page (text + optional image) to an existing audiobook.
      * Multipart request: text, image (file), page_number.
      */
-    public function addPage(Request $request, string $audiobookId): JsonResponse
+    public function addPage(Request $request, string $audiobookId, GeminiService $gemini): JsonResponse
     {
         $this->logEvent('Content', 'addPage called', [
             'audiobook_id' => $audiobookId,
@@ -604,6 +623,12 @@ class ContentManagementController extends ApiController
                 $book->save();
             }
 
+            // Pre-warm the TTS cache with the default voice so the first
+            // playback returns instantly instead of waiting for generation.
+            if (!empty($page->text) && $gemini->isConfigured()) {
+                try { $gemini->generateSpeech(trim($page->text), 'Kore'); } catch (\Throwable $_) {}
+            }
+
             $this->logEvent('Content', 'addPage success', [
                 'audiobook_id' => $book->audiobook_id,
                 'page_id'      => $page->page_id,
@@ -624,21 +649,6 @@ class ContentManagementController extends ApiController
         }
     }
 
-    /**
-     * Turn a stored media reference into a usable URL. Locally-stored files
-     * (e.g. "storage/uploads/...") are made absolute; values that are already
-     * full URLs (e.g. AI image links) are returned unchanged.
-     */
-    private function mediaUrl(?string $path): ?string
-    {
-        if ($path === null || $path === '') {
-            return null;
-        }
-        return \Illuminate\Support\Str::startsWith($path, ['http://', 'https://'])
-            ? $path
-            : url($path);
-    }
-
     private function serializePages(Audiobook $item): array
     {
         return $item->pages->map(fn ($p) => [
@@ -651,6 +661,7 @@ class ContentManagementController extends ApiController
 
     private function serialize(Audiobook $item): array
     {
+        $track = $item->track_id ? MusicTrack::find($item->track_id) : null;
         return [
             'audiobook_id'     => $item->audiobook_id,
             'title'            => $item->title,
@@ -672,9 +683,101 @@ class ContentManagementController extends ApiController
             'is_generated'     => (bool) $item->is_generated,
             'is_user_uploaded' => (bool) $item->is_user_uploaded,
             'status'           => $item->status,
+            'track_id'         => $item->track_id,
+            'bgm_volume'       => (int) ($item->bgm_volume ?? 30),
+            'music_track'      => $track ? [
+                'track_id'      => $track->track_id,
+                'title'         => $track->title,
+                'composer'      => $track->composer,
+                'file_url'      => $this->mediaUrl($track->file_path),
+                'tags'          => $track->tagsArray(),
+                'duration_secs' => $track->duration_secs,
+            ] : null,
             'pages'            => $this->serializePages($item),
             'created_at'       => $item->created_at ? Carbon::parse($item->created_at)->format('Y-m-d H:i:s') : null,
             'updated_at'       => $item->updated_at ? Carbon::parse($item->updated_at)->format('Y-m-d H:i:s') : null,
         ];
+    }
+
+    /**
+     * If the request contains a track_id, use it. Otherwise, if BGM is
+     * enabled (track_id key present but null/empty), pick the best matching
+     * track from the library based on the story's content keywords.
+     */
+    private function resolveTrackId(Request $request, string $storyContent): ?string
+    {
+        // Caregiver explicitly chose a track.
+        if ($request->filled('track_id')) {
+            return $request->input('track_id');
+        }
+
+        // track_id key absent entirely → BGM disabled.
+        if (!$request->has('track_id')) {
+            return null;
+        }
+
+        // track_id present but blank → auto-select by content vibe.
+        return $this->autoSelectTrack($storyContent);
+    }
+
+    /**
+     * Score each active track against the story content and return the
+     * track_id of the best match, or null if nothing scores.
+     */
+    private function autoSelectTrack(string $content): ?string
+    {
+        $content = strtolower($content);
+
+        // Keyword → mood tag mapping used for scoring.
+        $keywords = [
+            'happy'       => ['Happy', 'Upbeat', 'Energetic'],
+            'fun'         => ['Playful', 'Energetic', 'Happy'],
+            'play'        => ['Playful', 'Energetic'],
+            'laugh'       => ['Happy', 'Upbeat'],
+            'excit'       => ['Energetic', 'Upbeat'],
+            'adventure'   => ['Adventurous', 'Curious'],
+            'explor'      => ['Adventurous', 'Curious', 'Imaginative'],
+            'magic'       => ['Whimsical', 'Imaginative'],
+            'wonder'      => ['Whimsical', 'Imaginative', 'Curious'],
+            'dream'       => ['Whimsical', 'Imaginative', 'Calm'],
+            'mystery'     => ['Mysterious', 'Curious'],
+            'secret'      => ['Mysterious', 'Curious'],
+            'calm'        => ['Calm', 'Peaceful', 'Gentle'],
+            'sleep'       => ['Calm', 'Soothing', 'Relaxing', 'Peaceful'],
+            'quiet'       => ['Calm', 'Peaceful'],
+            'gentle'      => ['Gentle', 'Calm'],
+            'sad'         => ['Calm', 'Gentle', 'Peaceful'],
+            'rain'        => ['Calm', 'Soothing', 'Peaceful'],
+            'nature'      => ['Calm', 'Peaceful'],
+            'friend'      => ['Gentle', 'Playful', 'Whimsical'],
+            'story'       => ['Whimsical', 'Gentle'],
+            'once upon'   => ['Whimsical', 'Imaginative'],
+            'forest'      => ['Adventurous', 'Calm'],
+            'star'        => ['Imaginative', 'Whimsical'],
+        ];
+
+        $tracks = MusicTrack::where('status', 'active')->get();
+        $scores = [];
+
+        foreach ($tracks as $track) {
+            $scores[$track->track_id] = 0;
+            $trackTags = array_map('strtolower', $track->tagsArray());
+
+            foreach ($keywords as $kw => $moods) {
+                if (str_contains($content, $kw)) {
+                    foreach ($moods as $mood) {
+                        if (in_array(strtolower($mood), $trackTags, true)) {
+                            $scores[$track->track_id]++;
+                        }
+                    }
+                }
+            }
+        }
+
+        arsort($scores);
+        $best = array_key_first($scores);
+
+        // Only return a match if at least one keyword fired.
+        return ($best !== null && $scores[$best] > 0) ? $best : ($tracks->first()?->track_id);
     }
 }

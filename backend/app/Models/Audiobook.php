@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -37,12 +38,15 @@ class Audiobook extends Model
         'is_generated',
         'is_user_uploaded',
         'status',
+        'track_id',
+        'bgm_volume',
     ];
 
     protected $casts = [
         'is_generated' => 'boolean',
         'is_user_uploaded' => 'boolean',
         'duration_minutes' => 'integer',
+        'bgm_volume' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -56,6 +60,11 @@ class Audiobook extends Model
                 $model->audiobook_id = (string) Str::uuid();
             }
         });
+    }
+
+    public function musicTrack(): BelongsTo
+    {
+        return $this->belongsTo(MusicTrack::class, 'track_id', 'track_id');
     }
 
     public function listeningHistory(): HasMany

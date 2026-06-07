@@ -15,8 +15,10 @@ import '../../services/api_service.dart';
 import '../../services/database_service.dart';
 import '../../state/language_state.dart';
 import '../../theme/app_colors.dart';
+import '../../models/music_track.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/back_pill.dart';
+import '../../widgets/bgm_picker_sheet.dart';
 import '../../widgets/soft_card.dart';
 import '../../widgets/soft_chip.dart';
 
@@ -62,6 +64,16 @@ class _UploadContentPageState extends State<UploadContentPage> {
   // Language for the manual storybook (defaults to the app language at submit
   // time). null = inherit; 'en' / 'ms' override.
   String? _manualLanguage;
+
+  // BGM — write mode (required selection when enabled)
+  bool _writeBgmEnabled = false;
+  MusicTrack? _writeBgmTrack;
+  int _writeBgmVolume = 30;
+
+  // BGM — AI mode (null track = auto-select by backend when enabled)
+  bool _aiBgmEnabled = false;
+  MusicTrack? _aiBgmTrack;
+  int _aiBgmVolume = 30;
 
   // AI ("generate") form
   final _aiTopicCtrl = TextEditingController();
@@ -154,6 +166,12 @@ class _UploadContentPageState extends State<UploadContentPage> {
           context: context);
       return;
     }
+    if (_writeBgmEnabled && _writeBgmTrack == null) {
+      AppSnackbar.warning(
+          'Please choose a background music track, or disable BGM',
+          context: context);
+      return;
+    }
 
     setState(() => _submitting = true);
 
@@ -174,6 +192,8 @@ class _UploadContentPageState extends State<UploadContentPage> {
       coverImagePath: _coverPath,
       audioFilePath: _audioPath,
       language: language,
+      trackId: _writeBgmEnabled ? _writeBgmTrack?.trackId : null,
+      bgmVolume: _writeBgmVolume,
     );
 
     if (!mounted) return;
@@ -237,6 +257,9 @@ class _UploadContentPageState extends State<UploadContentPage> {
       sourceText: _aiBaseTextCtrl.text.trim(),
       generateImage: _aiGenerateImage,
       pageCount: _aiPages == 'Auto' ? null : int.tryParse(_aiPages),
+      includeBgm: _aiBgmEnabled,
+      trackId: _aiBgmTrack?.trackId, // null = auto-select when includeBgm=true
+      bgmVolume: _aiBgmVolume,
       language: language,
     );
     if (!mounted) return;
@@ -535,6 +558,24 @@ class _UploadContentPageState extends State<UploadContentPage> {
           label: const Text('Add page',
               style: TextStyle(fontWeight: FontWeight.w700)),
         ),
+        const SizedBox(height: 14),
+        _BgmCard(
+          enabled: _writeBgmEnabled,
+          selectedTrack: _writeBgmTrack,
+          volume: _writeBgmVolume,
+          autoAllowed: false,
+          onToggle: (v) => setState(() {
+            _writeBgmEnabled = v;
+            if (!v) _writeBgmTrack = null;
+          }),
+          onPick: () async {
+            final track = await BgmPickerSheet.show(context,
+                initialTrack: _writeBgmTrack);
+            if (track != null) setState(() => _writeBgmTrack = track);
+          },
+          onClear: () => setState(() => _writeBgmTrack = null),
+          onVolumeChanged: (v) => setState(() => _writeBgmVolume = v),
+        ),
         const SizedBox(height: 18),
         SizedBox(
           width: double.infinity,
@@ -709,6 +750,24 @@ class _UploadContentPageState extends State<UploadContentPage> {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 14),
+        _BgmCard(
+          enabled: _aiBgmEnabled,
+          selectedTrack: _aiBgmTrack,
+          volume: _aiBgmVolume,
+          autoAllowed: true,
+          onToggle: (v) => setState(() {
+            _aiBgmEnabled = v;
+            if (!v) _aiBgmTrack = null;
+          }),
+          onPick: () async {
+            final track =
+                await BgmPickerSheet.show(context, initialTrack: _aiBgmTrack);
+            if (track != null) setState(() => _aiBgmTrack = track);
+          },
+          onClear: () => setState(() => _aiBgmTrack = null),
+          onVolumeChanged: (v) => setState(() => _aiBgmVolume = v),
         ),
         const SizedBox(height: 18),
         SizedBox(
@@ -1418,6 +1477,185 @@ class _Label extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+    );
+  }
+}
+
+/// BGM section card used in both Write and AI upload modes.
+///
+/// [autoAllowed] — when true (AI mode) shows an "Auto-select" hint instead of
+/// requiring the caregiver to pick a track manually.
+class _BgmCard extends StatelessWidget {
+  final bool enabled;
+  final MusicTrack? selectedTrack;
+  final int volume;
+  final bool autoAllowed;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+  final ValueChanged<int> onVolumeChanged;
+
+  const _BgmCard({
+    required this.enabled,
+    required this.selectedTrack,
+    required this.volume,
+    required this.autoAllowed,
+    required this.onToggle,
+    required this.onPick,
+    required this.onClear,
+    required this.onVolumeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      padding: const EdgeInsets.fromLTRB(18, 6, 18, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            value: enabled,
+            activeThumbColor: AppColors.primaryBlueDark,
+            onChanged: onToggle,
+            title: const Text('Background Music',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(
+              autoAllowed
+                  ? 'AI will pick a fitting track, or choose one below.'
+                  : 'Add gentle music behind the narration.',
+              style:
+                  const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+          if (enabled) ...[
+            const SizedBox(height: 6),
+            if (selectedTrack != null) ...[
+              _SelectedTrackRow(
+                track: selectedTrack!,
+                onChangeTap: onPick,
+                onClear: onClear,
+              ),
+            ] else ...[
+              OutlinedButton.icon(
+                onPressed: onPick,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primaryBlueDark,
+                  side: const BorderSide(color: AppColors.cardBorder),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.library_music_rounded, size: 18),
+                label: Text(
+                  autoAllowed ? 'Choose a track (optional)' : 'Choose a track',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (autoAllowed) ...[
+                const SizedBox(height: 6),
+                const Text(
+                  'Leave empty to let AI pick the best match for the story.',
+                  style: TextStyle(
+                      color: AppColors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.volume_up_rounded,
+                    size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: 6),
+                const Text('Volume',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13)),
+                const Spacer(),
+                Text('$volume%',
+                    style: const TextStyle(
+                        color: AppColors.textSecondary, fontSize: 13)),
+              ],
+            ),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: AppColors.primaryBlueDark,
+                thumbColor: AppColors.primaryBlueDark,
+                overlayColor:
+                    AppColors.primaryBlue.withValues(alpha: 0.2),
+                inactiveTrackColor: AppColors.cardBorder,
+                trackHeight: 3,
+              ),
+              child: Slider(
+                value: volume.toDouble(),
+                min: 0,
+                max: 100,
+                divisions: 20,
+                onChanged: (v) => onVolumeChanged(v.round()),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectedTrackRow extends StatelessWidget {
+  final MusicTrack track;
+  final VoidCallback onChangeTap;
+  final VoidCallback onClear;
+
+  const _SelectedTrackRow({
+    required this.track,
+    required this.onChangeTap,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.iconCircleBlue,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.music_note_rounded,
+              size: 20, color: AppColors.primaryBlueDark),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(track.title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13)),
+                if (track.composer != null && track.composer!.isNotEmpty)
+                  Text(track.composer!,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: onChangeTap,
+            child: const Text('Change',
+                style: TextStyle(
+                    color: AppColors.primaryBlueDark,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: onClear,
+            child: const Icon(Icons.close_rounded,
+                size: 18, color: AppColors.textSecondary),
+          ),
+        ],
       ),
     );
   }

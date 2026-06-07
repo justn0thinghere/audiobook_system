@@ -53,6 +53,9 @@ class Audiobook {
   final List<AudiobookPage> pages;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? trackId;         // BGM track UUID (null = no BGM)
+  final int bgmVolume;           // 0-100, default 30
+  final String? musicTrackFileUrl; // resolved URL of the music file
 
   Audiobook({
     this.audiobookId,
@@ -78,6 +81,9 @@ class Audiobook {
     this.pages = const [],
     this.createdAt,
     this.updatedAt,
+    this.trackId,
+    this.bgmVolume = 30,
+    this.musicTrackFileUrl,
   });
 
   factory Audiobook.fromJson(Map<String, dynamic> json) {
@@ -112,6 +118,12 @@ class Audiobook {
       pages: pages,
       createdAt: safeDate(json['created_at']),
       updatedAt: safeDate(json['updated_at']),
+      trackId: safeNullableString(json['track_id']),
+      bgmVolume: safeInt(json['bgm_volume']) ?? 30,
+      musicTrackFileUrl: json['music_track'] is Map<String, dynamic>
+          ? safeNullableString(
+              (json['music_track'] as Map<String, dynamic>)['file_url'])
+          : null,
     );
   }
 

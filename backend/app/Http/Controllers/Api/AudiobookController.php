@@ -33,7 +33,7 @@ class AudiobookController extends ApiController
                 );
             }
 
-            $audiobook = Audiobook::where('audiobook_id', $audiobookId)->first();
+            $audiobook = Audiobook::with('musicTrack')->where('audiobook_id', $audiobookId)->first();
 
             if (!$audiobook) {
                 $this->logWarn('Audiobook', 'getAudiobookData not found', [
@@ -73,6 +73,17 @@ class AudiobookController extends ApiController
                     'image'          => $this->mediaUrl($p->image),
                     'audio_start_ms' => $p->audio_start_ms,
                 ])->toArray(),
+                'track_id'         => $audiobook->track_id,
+                'bgm_volume'       => $audiobook->bgm_volume ?? 30,
+                'music_track'      => $audiobook->musicTrack ? [
+                    'track_id'     => $audiobook->musicTrack->track_id,
+                    'title'        => $audiobook->musicTrack->title,
+                    'composer'     => $audiobook->musicTrack->composer,
+                    'file_url'     => $this->mediaUrl($audiobook->musicTrack->file_path),
+                    'tags'         => $audiobook->musicTrack->tagsArray(),
+                    'tempo'        => $audiobook->musicTrack->tempo,
+                    'duration_secs'=> $audiobook->musicTrack->duration_secs,
+                ] : null,
                 'created_at'       => $audiobook->created_at
                     ? Carbon::parse($audiobook->created_at)->format('Y-m-d H:i:s')
                     : null,
@@ -89,31 +100,4 @@ class AudiobookController extends ApiController
         }
     }
 
-    /**
-     * Locally-stored media (e.g. "storage/uploads/...") is made absolute;
-     * values that are already full URLs (e.g. AI image links) pass through.
-     */
-    /**
-     * Build an absolute URL for a stored relative path (e.g. "storage/uploads/..").
-     *
-     * Uses the INCOMING request's scheme+host instead of APP_URL, so the URL
-     * is always reachable by whatever client is asking — the Android emulator
-     * (which talks to the host as 10.0.2.2), a real phone on Wi-Fi, anything
-     * else. With APP_URL=http://localhost the emulator would never reach the
-     * static file and just_audio would silently fail, putting the player into
-     * its TTS fallback.
-     *
-     * Already-absolute URLs (Gemini image links) pass through unchanged.
-     */
-    private function mediaUrl(?string $path): ?string
-    {
-        if ($path === null || $path === '') {
-            return null;
-        }
-        if (\Illuminate\Support\Str::startsWith($path, ['http://', 'https://'])) {
-            return $path;
-        }
-        $base = rtrim(request()->getSchemeAndHttpHost(), '/');
-        return $base . '/' . ltrim($path, '/');
-    }
 }
