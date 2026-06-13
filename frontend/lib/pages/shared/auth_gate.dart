@@ -2,14 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth_state.dart';
-import '../../state/profiles_state.dart';
-import '../../state/settings_state.dart';
 import '../caregiver/caregiver_shell.dart';
 import 'login_page.dart';
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
-
   @override
   State<AuthGate> createState() => _AuthGateState();
 }
