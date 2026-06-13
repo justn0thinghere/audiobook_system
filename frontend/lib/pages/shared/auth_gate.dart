@@ -41,4 +41,11 @@ class _AuthGateState extends State<AuthGate> {
         return const CaregiverShell();
     }
   }
+
+  // Called after the current frame when the auth status changes.
+  // Keep this method to perform any cross-state synchronization or
+  // navigation that should not run during the build phase.
+  void _onAuthChanged(AuthStatus status) {
+    // No-op for now; implement synchronization or navigation here if needed.
+  }
 }
